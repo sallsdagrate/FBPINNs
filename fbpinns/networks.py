@@ -45,6 +45,7 @@ class FCN(Network):
         params = [FCN._random_layer_params(k, m, n)
                 for k, m, n in zip(keys, layer_sizes[:-1], layer_sizes[1:])]
         trainable_params = {"layers": params}
+        print(key, keys, layer_sizes, params, trainable_params)
         return {}, trainable_params
 
     @staticmethod
