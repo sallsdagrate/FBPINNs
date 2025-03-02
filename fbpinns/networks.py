@@ -34,6 +34,34 @@ class Network:
         raise NotImplementedError
 
 
+class ChebyshevKAN(Network):
+    "Chebyshev polynomials"
+
+    @staticmethod
+    def init_params(key, input_dim, output_dim, degree):
+        mean = 0
+        std = 1/(input_dim * (degree + 1))
+        coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree+1))
+        trainable_params = {"coeffs": coeffs}
+        return {}, trainable_params
+
+    @staticmethod
+    def network_fn(params, x):
+        coeffs = params["trainable"]["network"]["subdomain"]["coeffs"]
+        input_dim = coeffs.shape[0]
+        degree = coeffs.shape[-1] - 1
+
+        x = jnp.tanh(x)
+        batch_size = x.shape[0]
+
+        cheb = jnp.ones((batch_size, input_dim, degree + 1))
+        if degree >= 1:
+            cheb = cheb.at[:, :, 1].set(2 * x)
+        for d in range(2, degree + 1):
+            cheb = cheb.at[:, :, d].set(2 * x * cheb[:, :, d - 1] - cheb[:, :, d - 2])
+
+        y = jnp.einsum("bid,iod->bo", cheb, coeffs)
+        return y
 
 
 class FCN(Network):
@@ -45,7 +73,12 @@ class FCN(Network):
         params = [FCN._random_layer_params(k, m, n)
                 for k, m, n in zip(keys, layer_sizes[:-1], layer_sizes[1:])]
         trainable_params = {"layers": params}
-        print(key, keys, layer_sizes, params, trainable_params)
+        # print(f'''
+        # key: {key}',
+        # keys: {keys},
+        # layer_sizes: {layer_sizes},
+        # params: {[p.shape for p in params]},
+# ''')
         return {}, trainable_params
 
     @staticmethod
