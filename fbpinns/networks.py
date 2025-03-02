@@ -46,8 +46,13 @@ class ChebyshevKAN(Network):
         return {}, trainable_params
 
     @staticmethod
-    def network_fn(params, x):
-        coeffs = params["trainable"]["network"]["subdomain"]["coeffs"]
+    def network_fn(all_params, x):
+        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+        return ChebyshevKAN.forward(coeffs, x)
+
+    @staticmethod
+    def forward(coeffs, x):
+        print('input:', x.shape)
         input_dim = coeffs.shape[0]
         degree = coeffs.shape[-1] - 1
 
@@ -61,6 +66,8 @@ class ChebyshevKAN(Network):
             cheb = cheb.at[:, :, d].set(2 * x * cheb[:, :, d - 1] - cheb[:, :, d - 2])
 
         y = jnp.einsum("bid,iod->bo", cheb, coeffs)
+        y = y if len(x.shape) > 1 else y[0]
+        print('output:', y.shape)
         return y
 
 
@@ -73,12 +80,6 @@ class FCN(Network):
         params = [FCN._random_layer_params(k, m, n)
                 for k, m, n in zip(keys, layer_sizes[:-1], layer_sizes[1:])]
         trainable_params = {"layers": params}
-        # print(f'''
-        # key: {key}',
-        # keys: {keys},
-        # layer_sizes: {layer_sizes},
-        # params: {[p.shape for p in params]},
-# ''')
         return {}, trainable_params
 
     @staticmethod
@@ -92,13 +93,21 @@ class FCN(Network):
         return w,b
 
     @staticmethod
-    def network_fn(params, x):
-        params = params["trainable"]["network"]["subdomain"]["layers"]
+    def network_fn(all_params, x):
+        params = all_params["trainable"]["network"]["subdomain"]["layers"]
+        return FCN.forward(params, x)
+
+    @staticmethod
+    def forward(params, x):
+        print('input:', x.shape)
         for w, b in params[:-1]:
             x = jnp.dot(w, x) + b
             x = jnp.tanh(x)
+            print(x.shape)
         w, b = params[-1]
+        print(x.shape)
         x = jnp.dot(w, x) + b
+        print('output:', x.shape)
         return x
 
 class AdaptiveFCN(Network):

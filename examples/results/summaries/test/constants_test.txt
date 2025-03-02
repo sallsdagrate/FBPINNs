@@ -16,7 +16,7 @@ scheduler_kwargs: {}
 ns: ((200,),)
 n_test: (500,)
 sampler: grid
-optimiser: <function adam at 0x00000168B7775440>
+optimiser: <function adam at 0x15069c540>
 optimiser_kwargs: {'learning_rate': 0.001}
 seed: 0
 summary_freq: 1000
@@ -25,4 +25,4 @@ model_save_freq: 10000
 show_figures: True
 save_figures: False
 clear_output: True
-hostname: sumith_pc
+hostname: sumiths-macbook-pro.local
