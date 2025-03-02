@@ -1,22 +1,27 @@
 run: test
 domain: <class 'fbpinns.domains.RectangularDomainND'>
-domain_init_kwargs: {'xmin': array([0.]), 'xmax': array([1.])}
-problem: <class '__main__.HarmonicOscillator1D'>
-problem_init_kwargs: {'d': 2, 'w0': 80}
+domain_init_kwargs: {'xmin': array([-1.,  0.]), 'xmax': array([1., 1.])}
+problem: <class 'fbpinns.problems.BurgersEquation2D'>
+problem_init_kwargs: {}
 decomposition: <class 'fbpinns.decompositions.RectangularDecompositionND'>
-decomposition_init_kwargs: {'subdomain_xs': [array([0.        , 0.07142857, 0.14285714, 0.21428571, 0.28571429,
-       0.35714286, 0.42857143, 0.5       , 0.57142857, 0.64285714,
-       0.71428571, 0.78571429, 0.85714286, 0.92857143, 1.        ])], 'subdomain_ws': [array([0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15,
-       0.15, 0.15, 0.15, 0.15])], 'unnorm': (0.0, 1.0)}
-network: <class 'fbpinns.networks.AdaptiveSIREN'>
-network_init_kwargs: {'layer_sizes': [1, 32, 1]}
-n_steps: 20000
-scheduler: <class 'fbpinns.schedulers.AllActiveSchedulerND'>
-scheduler_kwargs: {}
-ns: ((200,),)
-n_test: (500,)
+decomposition_init_kwargs: {'subdomain_xs': [array([-1.        , -0.89473684, -0.78947368, -0.68421053, -0.57894737,
+       -0.47368421, -0.36842105, -0.26315789, -0.15789474, -0.05263158,
+        0.05263158,  0.15789474,  0.26315789,  0.36842105,  0.47368421,
+        0.57894737,  0.68421053,  0.78947368,  0.89473684,  1.        ]), array([0.        , 0.11111111, 0.22222222, 0.33333333, 0.44444444,
+       0.55555556, 0.66666667, 0.77777778, 0.88888889, 1.        ])], 'subdomain_ws': [array([0.30526316, 0.30526316, 0.30526316, 0.30526316, 0.30526316,
+       0.30526316, 0.30526316, 0.30526316, 0.30526316, 0.30526316,
+       0.30526316, 0.30526316, 0.30526316, 0.30526316, 0.30526316,
+       0.30526316, 0.30526316, 0.30526316, 0.30526316, 0.30526316]), array([0.32222222, 0.32222222, 0.32222222, 0.32222222, 0.32222222,
+       0.32222222, 0.32222222, 0.32222222, 0.32222222, 0.32222222])], 'unnorm': (0.0, 3.0)}
+network: <class 'fbpinns.networks.ChebyshevKAN'>
+network_init_kwargs: {'input_dim': 2, 'output_dim': 1, 'degree': 9}
+n_steps: 100000
+scheduler: <class 'fbpinns.schedulers.LineSchedulerRectangularND'>
+scheduler_kwargs: {'point': [0.0], 'iaxis': 0}
+ns: ((200, 100),)
+n_test: (200, 100)
 sampler: grid
-optimiser: <function adam at 0x15069c540>
+optimiser: <function adam at 0x13ef29800>
 optimiser_kwargs: {'learning_rate': 0.001}
 seed: 0
 summary_freq: 1000

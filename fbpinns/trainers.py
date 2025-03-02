@@ -769,6 +769,7 @@ class FBPINNTrainer(_Trainer):
         if i % (c.test_freq * 5) == 0:
             fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"],
                 x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test, x_batch, all_params, i, active, decomposition, n_test)
+            print('fs', fs)
             if fs is not None:
                 self._save_figs(i, fs)
 
