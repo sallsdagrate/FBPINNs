@@ -522,6 +522,92 @@ class WaveEquationGaussianVelocity3D(WaveEquationConstantVelocity3D):
         return c
 
 
+class Poisson2D(Problem):
+    """
+    Solves the 2D Poisson equation
+        - (u_xx + u_yy) = f(x,y)
+    on the domain [0,1] x [0,1] with Dirichlet boundary conditions u = 0 on ∂Ω.
+
+    We choose f(x,y) such that the exact solution is:
+        u(x,y) = sin(πx) sin(πy),
+    which implies f(x,y) = 2π² sin(πx) sin(πy).
+    """
+
+    @staticmethod
+    def init_params():
+        # 'dims': (ud, xd) => u is scalar (ud=1) and x is 2D (xd=2)
+        static_params = {
+            "dims": (1, 2),
+            "f_coeff": 2 * (jnp.pi ** 2)  # coefficient in the forcing function f(x,y)
+        }
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+        # --- Physics loss: sample interior points ---
+        # x_batch_phys: an array of shape (n_phys, 2)
+        # print(all_params, domain, key, sampler, batch_shapes)
+        x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        # We require:
+        #   (0,())       -> the network's 0th output (u)
+        #   (0,(0,0))    -> second derivative with respect to the first coordinate (u_xx)
+        #   (0,(1,1))    -> second derivative with respect to the second coordinate (u_yy)
+        required_ujs_phys = (
+            (0, ()),
+            (0, (0, 0)),
+            (0, (1, 1))
+        )
+
+        # --- Boundary loss: sample points on the boundary ---
+        # x_batch_boundary: an array of shape (n_bound, 2)
+        x_batch_boundary = domain.sample_boundaries(all_params, key, sampler, batch_shapes[1])[0]
+        # Dirichlet condition: u = 0 on ∂Ω
+        print(x_batch_boundary)
+        u_boundary = jnp.zeros((x_batch_boundary.shape[0], 1))
+        # For consistency with the other problem, we include a dummy derivative term.
+        dummy_deriv = jnp.zeros_like(u_boundary)
+        # Only the function value (u) is needed at the boundary.
+        required_ujs_boundary = ((0, ()),)
+
+        # The constraints are returned as a list with two groups:
+        # 1. Physics constraints: [interior points, tuple of required solution and derivative indices]
+        # 2. Boundary constraints: [boundary points, boundary labels for u, dummy for derivative, tuple specifying u only]
+        return [
+            [x_batch_phys, required_ujs_phys],
+            [x_batch_boundary, u_boundary, dummy_deriv, required_ujs_boundary]
+        ]
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        # --- Physics loss ---
+        # For the physics group, the constraints have been replaced with the evaluated quantities:
+        # [x_batch_phys, u, u_xx, u_yy]
+        x_phys = constraints[0][0]  # x_batch_phys
+        _, u, u_xx, u_yy = constraints[0]
+
+        # Compute the forcing term f(x,y) = 2π² sin(πx) sin(πy)
+        f_coeff = all_params["static"]["problem"]["f_coeff"]
+        # x_phys[:,0:1] extracts the first coordinate (x) and x_phys[:,1:2] extracts the second coordinate (y)
+        f_val = f_coeff * jnp.sin(jnp.pi * x_phys[:, 0:1]) * jnp.sin(jnp.pi * x_phys[:, 1:2])
+
+        # The physics residual is: u_xx + u_yy + f(x,y)
+        phys_residual = u_xx + u_yy + f_val
+        phys_loss = jnp.mean(phys_residual ** 2)
+
+        # --- Boundary loss ---
+        # For the boundary group, the constraints have been replaced with:
+        # [x_batch_boundary, u_boundary, dummy, u_pred]
+        _, u_bc, _, u_pred = constraints[1]
+        boundary_loss = 1e6 * jnp.mean((u_pred - u_bc) ** 2)
+
+        return phys_loss + boundary_loss
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        # The exact solution is u(x,y) = sin(πx) sin(πy)
+        u = jnp.sin(jnp.pi * x_batch[:, 0:1]) * jnp.sin(jnp.pi * x_batch[:, 1:2])
+        return u
+
 
 
 if __name__ == "__main__":
@@ -581,6 +667,7 @@ if __name__ == "__main__":
         plt.plot(np.tanh(2.5*t/(all_params["static"]["problem"]["source"][:,2].min()/all_params["static"]["problem"]["c0"]))**2)
         plt.legend()
         plt.show()
+
 
 
 
