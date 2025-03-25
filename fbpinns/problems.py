@@ -534,11 +534,12 @@ class Poisson2D(Problem):
     """
 
     @staticmethod
-    def init_params():
+    def init_params(f_coeff=2 * (jnp.pi ** 2), sd=0.07):
         # 'dims': (ud, xd) => u is scalar (ud=1) and x is 2D (xd=2)
         static_params = {
             "dims": (1, 2),
-            "f_coeff": 2 * (jnp.pi ** 2)  # coefficient in the forcing function f(x,y)
+            "f_coeff": f_coeff,  # coefficient in the forcing function f(x,y)
+            "sd": sd
         }
         return static_params, {}
 
@@ -546,7 +547,6 @@ class Poisson2D(Problem):
     def sample_constraints(all_params, domain, key, sampler, batch_shapes):
         # --- Physics loss: sample interior points ---
         # x_batch_phys: an array of shape (n_phys, 2)
-        # print(all_params, domain, key, sampler, batch_shapes)
         x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
         # We require:
         #   (0,())       -> the network's 0th output (u)
@@ -558,54 +558,40 @@ class Poisson2D(Problem):
             (0, (1, 1))
         )
 
-        # --- Boundary loss: sample points on the boundary ---
-        # x_batch_boundary: an array of shape (n_bound, 2)
-        x_batch_boundary = domain.sample_boundaries(all_params, key, sampler, batch_shapes[1])[0]
-        # Dirichlet condition: u = 0 on ∂Ω
-        print(x_batch_boundary)
-        u_boundary = jnp.zeros((x_batch_boundary.shape[0], 1))
-        # For consistency with the other problem, we include a dummy derivative term.
-        dummy_deriv = jnp.zeros_like(u_boundary)
-        # Only the function value (u) is needed at the boundary.
-        required_ujs_boundary = ((0, ()),)
-
-        # The constraints are returned as a list with two groups:
-        # 1. Physics constraints: [interior points, tuple of required solution and derivative indices]
-        # 2. Boundary constraints: [boundary points, boundary labels for u, dummy for derivative, tuple specifying u only]
-        return [
-            [x_batch_phys, required_ujs_phys],
-            [x_batch_boundary, u_boundary, dummy_deriv, required_ujs_boundary]
-        ]
+        # Physics constraints: [interior points, tuple of required solution and derivative indices]
+        return [[x_batch_phys, required_ujs_phys],]
+    
+    @staticmethod
+    def constraining_fn(all_params, x_batch, u):
+        sd = all_params["static"]["problem"]["sd"]
+        x, y, tanh = x_batch[:,0:1], x_batch[:,1:2], jax.nn.tanh
+        u = 0.5 * tanh((0+x)/sd) * tanh((1-x)/sd) * tanh((0+y)/sd) * tanh((1-y)/sd)
+        return u
 
     @staticmethod
     def loss_fn(all_params, constraints):
         # --- Physics loss ---
         # For the physics group, the constraints have been replaced with the evaluated quantities:
         # [x_batch_phys, u, u_xx, u_yy]
-        x_phys = constraints[0][0]  # x_batch_phys
-        _, u, u_xx, u_yy = constraints[0]
+        x_phys, u, u_xx, u_yy = constraints[0]
+        x = x_phys[:, 0:1]
+        y = x_phys[:, 1:2]
 
         # Compute the forcing term f(x,y) = 2π² sin(πx) sin(πy)
         f_coeff = all_params["static"]["problem"]["f_coeff"]
-        # x_phys[:,0:1] extracts the first coordinate (x) and x_phys[:,1:2] extracts the second coordinate (y)
-        f_val = f_coeff * jnp.sin(jnp.pi * x_phys[:, 0:1]) * jnp.sin(jnp.pi * x_phys[:, 1:2])
+        f_val = f_coeff * jnp.sin(jnp.pi * x) * jnp.sin(jnp.pi * y)
 
         # The physics residual is: u_xx + u_yy + f(x,y)
         phys_residual = u_xx + u_yy + f_val
-        phys_loss = jnp.mean(phys_residual ** 2)
 
-        # --- Boundary loss ---
-        # For the boundary group, the constraints have been replaced with:
-        # [x_batch_boundary, u_boundary, dummy, u_pred]
-        _, u_bc, _, u_pred = constraints[1]
-        boundary_loss = 1e6 * jnp.mean((u_pred - u_bc) ** 2)
-
-        return phys_loss + boundary_loss
+        return jnp.mean(phys_residual ** 2)
 
     @staticmethod
     def exact_solution(all_params, x_batch, batch_shape=None):
         # The exact solution is u(x,y) = sin(πx) sin(πy)
-        u = jnp.sin(jnp.pi * x_batch[:, 0:1]) * jnp.sin(jnp.pi * x_batch[:, 1:2])
+        x = x_batch[:, 0:1]
+        y = x_batch[:, 1:2]
+        u = jnp.sin(jnp.pi * x) * jnp.sin(jnp.pi * y)
         return u
 
 
