@@ -52,7 +52,6 @@ class ChebyshevKAN(Network):
 
     @staticmethod
     def forward(coeffs, x):
-        print('input:', x.shape)
         input_dim = coeffs.shape[0]
         degree = coeffs.shape[-1] - 1
 
@@ -67,7 +66,6 @@ class ChebyshevKAN(Network):
 
         y = jnp.einsum("bid,iod->bo", cheb, coeffs)
         y = y if len(x.shape) > 1 else y[0]
-        print('output:', y.shape)
         return y
 
 

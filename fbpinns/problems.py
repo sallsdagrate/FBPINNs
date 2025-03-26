@@ -534,7 +534,7 @@ class Poisson2D(Problem):
     """
 
     @staticmethod
-    def init_params(f_coeff=2 * (jnp.pi ** 2), sd=0.07):
+    def init_params(f_coeff=2 * (jnp.pi ** 2), sd=0.1):
         # 'dims': (ud, xd) => u is scalar (ud=1) and x is 2D (xd=2)
         static_params = {
             "dims": (1, 2),
@@ -553,7 +553,6 @@ class Poisson2D(Problem):
         #   (0,(0,0))    -> second derivative with respect to the first coordinate (u_xx)
         #   (0,(1,1))    -> second derivative with respect to the second coordinate (u_yy)
         required_ujs_phys = (
-            (0, ()),
             (0, (0, 0)),
             (0, (1, 1))
         )
@@ -565,7 +564,7 @@ class Poisson2D(Problem):
     def constraining_fn(all_params, x_batch, u):
         sd = all_params["static"]["problem"]["sd"]
         x, y, tanh = x_batch[:,0:1], x_batch[:,1:2], jax.nn.tanh
-        u = 0.5 * tanh((0+x)/sd) * tanh((1-x)/sd) * tanh((0+y)/sd) * tanh((1-y)/sd)
+        u = tanh((0+x)/sd) * tanh((1-x)/sd) * tanh((0+y)/sd) * tanh((1-y)/sd) * u
         return u
 
     @staticmethod
@@ -573,7 +572,7 @@ class Poisson2D(Problem):
         # --- Physics loss ---
         # For the physics group, the constraints have been replaced with the evaluated quantities:
         # [x_batch_phys, u, u_xx, u_yy]
-        x_phys, u, u_xx, u_yy = constraints[0]
+        x_phys, u_xx, u_yy = constraints[0]
         x = x_phys[:, 0:1]
         y = x_phys[:, 1:2]
 
