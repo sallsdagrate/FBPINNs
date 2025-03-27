@@ -97,7 +97,6 @@ class FCN(Network):
 
     @staticmethod
     def forward(params, x):
-        print('input:', x.shape)
         for w, b in params[:-1]:
             x = jnp.dot(w, x) + b
             x = jnp.tanh(x)
@@ -105,7 +104,6 @@ class FCN(Network):
         w, b = params[-1]
         print(x.shape)
         x = jnp.dot(w, x) + b
-        print('output:', x.shape)
         return x
 
 class AdaptiveFCN(Network):

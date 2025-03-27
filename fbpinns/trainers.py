@@ -767,11 +767,16 @@ class FBPINNTrainer(_Trainer):
 
         # create figures
         if i % (c.test_freq * 5) == 0:
+            # logger.info('dims', all_params["static"]["problem"]["dims"])
             fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"],
                 x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test, x_batch, all_params, i, active, decomposition, n_test)
-            print('fs', fs)
+
             if fs is not None:
                 self._save_figs(i, fs)
+
+            jnp.save(f'saved_arrays/wave_exact_{i}.npy', u_exact)
+            jnp.save(f'saved_arrays/wave_test_{i}.npy', u_test)
+            logger.info('saved arrays')
 
         return u_test_losses
 
@@ -839,7 +844,7 @@ class PINNTrainer(_Trainer):
                                    constraints, model_fns, jmapss, loss_fn).compile()
         logger.info(f"[i: {0}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
         cost_ = update.cost_analysis()
-        p,f = total_size(active_params["network"]), cost_[0]["flops"] if (cost_ and "flops" in cost_[0]) else 0
+        p,f = total_size(active_params["network"]), cost_["flops"] if (cost_ and "flops" in cost_) else 0
         logger.debug("p, f")
         logger.debug((p,f))
 
@@ -963,7 +968,7 @@ if __name__ == "__main__":
         )
 
     run = FBPINNTrainer(c)
-    #run = PINNTrainer(c)
+    # run = PINNTrainer(c)
 
     all_params = run.train()
     print(all_params["static"]["problem"])

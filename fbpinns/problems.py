@@ -522,76 +522,82 @@ class WaveEquationGaussianVelocity3D(WaveEquationConstantVelocity3D):
         return c
 
 
-class Poisson2D(Problem):
+class SimplePoisson2D(Problem):
     """
-    Solves the 2D Poisson equation
-        - (u_xx + u_yy) = f(x,y)
-    on the domain [0,1] x [0,1] with Dirichlet boundary conditions u = 0 on ∂Ω.
+    Solves the PDE:
+        u_xx + u_yy = f(x,y)
+    on the domain [0,1] x [0,1], with boundary condition u=0 on all edges.
 
-    We choose f(x,y) such that the exact solution is:
-        u(x,y) = sin(πx) sin(πy),
-    which implies f(x,y) = 2π² sin(πx) sin(πy).
+    We define the exact solution as:
+        u(x,y) = x(1 - x)*y(1 - y),
+    which is zero on the boundary. Then,
+        f(x,y) = -2[x(1 - x) + y(1 - y)].
     """
 
     @staticmethod
-    def init_params(f_coeff=2 * (jnp.pi ** 2), sd=0.1):
-        # 'dims': (ud, xd) => u is scalar (ud=1) and x is 2D (xd=2)
+    def init_params():
+        # 'dims': (ud, xd) => 1D output (ud=1), 2D input (xd=2)
         static_params = {
             "dims": (1, 2),
-            "f_coeff": f_coeff,  # coefficient in the forcing function f(x,y)
-            "sd": sd
         }
         return static_params, {}
 
     @staticmethod
     def sample_constraints(all_params, domain, key, sampler, batch_shapes):
-        # --- Physics loss: sample interior points ---
-        # x_batch_phys: an array of shape (n_phys, 2)
+        """
+        Samples interior points for the physics loss. We request the second
+        derivatives with respect to x and y for the PDE residual.
+        """
         x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
-        # We require:
-        #   (0,())       -> the network's 0th output (u)
-        #   (0,(0,0))    -> second derivative with respect to the first coordinate (u_xx)
-        #   (0,(1,1))    -> second derivative with respect to the second coordinate (u_yy)
         required_ujs_phys = (
-            (0, (0, 0)),
-            (0, (1, 1))
+            (0, (0, 0)),  # u_xx
+            (0, (1, 1)),  # u_yy
         )
+        # Return as a single group for the physics constraint
+        return [[x_batch_phys, required_ujs_phys]]
 
-        # Physics constraints: [interior points, tuple of required solution and derivative indices]
-        return [[x_batch_phys, required_ujs_phys],]
-    
     @staticmethod
     def constraining_fn(all_params, x_batch, u):
-        sd = all_params["static"]["problem"]["sd"]
-        x, y, tanh = x_batch[:,0:1], x_batch[:,1:2], jax.nn.tanh
-        u = tanh((0+x)/sd) * tanh((1-x)/sd) * tanh((0+y)/sd) * tanh((1-y)/sd) * u
+        """
+        Enforces the Dirichlet boundary condition u=0 on the entire boundary
+        by multiplying the network output by x(1-x)*y(1-y).
+        """
+        x = x_batch[:, 0:1]
+        y = x_batch[:, 1:2]
+        b, c = 0, 1
+        tanh = jax.nn.tanh
+        sd = 0.1
+        u = tanh((b-x)/sd) * tanh((c-x)/sd) * tanh((b-y)/sd) * tanh((c-y)/sd) * u
+        # This ensures the solution is zero when x=0, x=1, y=0, or y=1.
         return u
 
     @staticmethod
     def loss_fn(all_params, constraints):
-        # --- Physics loss ---
-        # For the physics group, the constraints have been replaced with the evaluated quantities:
-        # [x_batch_phys, u, u_xx, u_yy]
-        x_phys, u_xx, u_yy = constraints[0]
-        x = x_phys[:, 0:1]
-        y = x_phys[:, 1:2]
+        """
+        Physics loss: the PDE residual. 
+        We define f(x,y) = -2 [ x(1 - x) + y(1 - y) ].
+        The PDE is (u_xx + u_yy) - f(x,y) = 0.
+        """
+        x_batch_phys, u_xx, u_yy = constraints[0]
+        x = x_batch_phys[:, 0:1]
+        y = x_batch_phys[:, 1:2]
 
-        # Compute the forcing term f(x,y) = 2π² sin(πx) sin(πy)
-        f_coeff = all_params["static"]["problem"]["f_coeff"]
-        f_val = f_coeff * jnp.sin(jnp.pi * x) * jnp.sin(jnp.pi * y)
+        # Define the forcing function
+        f_val = -2.0 * (x * (1.0 - x) + y * (1.0 - y))
 
-        # The physics residual is: u_xx + u_yy + f(x,y)
-        phys_residual = u_xx + u_yy + f_val
-
-        return jnp.mean(phys_residual ** 2)
+        # PDE residual: (u_xx + u_yy) - f_val
+        residual = (u_xx + u_yy) - f_val
+        return jnp.mean(residual**2)
 
     @staticmethod
     def exact_solution(all_params, x_batch, batch_shape=None):
-        # The exact solution is u(x,y) = sin(πx) sin(πy)
+        """
+        Exact solution: u(x,y) = x(1 - x)*y(1 - y).
+        """
         x = x_batch[:, 0:1]
         y = x_batch[:, 1:2]
-        u = jnp.sin(jnp.pi * x) * jnp.sin(jnp.pi * y)
-        return u
+        return x * (1 - x) * y * (1 - y)
+
 
 
 class HeatEquation1D(Problem):

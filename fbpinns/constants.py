@@ -100,10 +100,10 @@ class Constants(ConstantsBase):
 
 if __name__ == "__main__":
 
-    c = Constants(seed=2)
-    print(c)
+    # c = Constants(seed=2)
+    # print(c)
 
-    c.get_outdirs()
-    c.save_constants_file()
+    # c.get_outdirs()
+    # c.save_constants_file()
 
-
+    print(get_subdomain_ws([np.linspace(0, 1, 5)], width=2.5), [np.linspace(0, 1, 5)])
