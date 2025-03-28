@@ -593,6 +593,7 @@ class FBPINNTrainer(_Trainer):
             ps_ = cl.init_params(**kwargs)
             if ps_[0]: all_params["static"][tag] = ps_[0]
             if ps_[1]: all_params["trainable"][tag] = ps_[1]
+        print(all_params["static"]["domain"]["xd"],all_params["static"]["problem"]["dims"][1], all_params["static"]["decomposition"]["xd"])
         assert (all_params["static"]["domain"]["xd"] ==\
                 all_params["static"]["problem"]["dims"][1] ==\
                 all_params["static"]["decomposition"]["xd"])
@@ -772,28 +773,31 @@ class FBPINNTrainer(_Trainer):
             # logger.info('dims', all_params["static"]["problem"]["dims"])
             ud = all_params["static"]["problem"]["dims"][0]
             print(x_batch_test.shape, u_exact.shape, u_test.shape, us_test.shape, ws_test.shape, us_raw_test.shape, x_batch.shape, n_test)
-            for u_out in range(ud):
+            if ud > 1:
+                for u_out in range(ud):
 
-                fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"],
-                    x_batch_test, 
-                    u_exact[:, u_out], 
-                    u_test[:, u_out], 
-                    us_test[:, u_out], 
-                    ws_test, 
-                    us_raw_test[:, u_out], 
-                    x_batch, 
-                    all_params, 
-                    i, 
-                    active, 
-                    decomposition, 
-                    n_test
-                    )
+                    fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"],
+                        x_batch_test, 
+                        u_exact[:, u_out], 
+                        u_test[:, u_out], 
+                        us_test[:, u_out], 
+                        ws_test, 
+                        us_raw_test[:, u_out], 
+                        x_batch, 
+                        all_params, 
+                        i, 
+                        active, 
+                        decomposition, 
+                        n_test
+                        )
+            else:
+                fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"], x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test, x_batch, all_params, i, active, decomposition, n_test)
 
-                if fs is not None:
-                    self._save_figs(i, fs)
+            if fs is not None:
+                self._save_figs(i, fs)
 
-                # jnp.save(f'saved_arrays/wave_exact_{i}.npy', u_exact)
-                # jnp.save(f'saved_arrays/wave_test_{i}.npy', u_test)
+                # jnp.save(f'saved_arrays/sch_2_exact_{u_out}_{i}.npy', u_exact)
+                # jnp.save(f'saved_arrays/sch_test_{u_out}_{i}.npy', u_test)
                 # logger.info('saved arrays')
 
         return u_test_losses
