@@ -761,7 +761,9 @@ class FBPINNTrainer(_Trainer):
 
         # get losses over test data
         l1 = jnp.mean(jnp.abs(u_exact-u_test)).item()
-        l1n = l1 / u_exact.std().item()
+        std = u_exact.std().item()
+        std = std if std > 0 else 1
+        l1n = l1 / std
         u_test_losses.append([i, pstep, fstep, time.time()-start0, l1, l1n])
         writer.add_scalar("loss/test/l1_istep", l1, i)
 

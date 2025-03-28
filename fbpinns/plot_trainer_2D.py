@@ -26,7 +26,7 @@ def _plot_test_im(u_test, xlim, ulim, n_test, it=None):
 def plot_2D_FBPINN(x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test, x_batch, all_params, i, active, decomposition, n_test):
 
     xlim, ulim = _plot_setup(x_batch_test, u_exact)
-    # _, ulim_err = _plot_setup(x_batch_test, u_exact - u_test)
+    _, ulim_err = _plot_setup(x_batch_test, u_exact - u_test)
     xlim0 = x_batch_test.min(0), x_batch_test.max(0)
 
     f = plt.figure(figsize=(8,10))
@@ -43,8 +43,7 @@ def plot_2D_FBPINN(x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test,
     # plot full solutions
     plt.subplot(3,2,2)
     plt.title(f"[{i}] Difference")
-    _plot_test_im(jnp.abs(u_exact - u_test), xlim0, ulim, n_test)
-    # logger.info(xlim0, ulim, n_test)
+    _plot_test_im(jnp.abs(u_exact - u_test), xlim0, ulim_err, n_test)
 
     plt.subplot(3,2,3)
     plt.title(f"[{i}] Full solution")
