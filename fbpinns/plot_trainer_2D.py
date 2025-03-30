@@ -43,7 +43,7 @@ def plot_2D_FBPINN(x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test,
     # plot full solutions
     plt.subplot(3,2,2)
     plt.title(f"[{i}] Difference")
-    _plot_test_im(jnp.abs(u_exact - u_test), xlim0, ulim_err, n_test)
+    _plot_test_im(u_exact - u_test, xlim0, ulim_err, n_test)
 
     plt.subplot(3,2,3)
     plt.title(f"[{i}] Full solution")

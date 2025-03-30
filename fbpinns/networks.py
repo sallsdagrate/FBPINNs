@@ -38,6 +38,43 @@ class ChebyshevKAN(Network):
     "Chebyshev polynomials"
 
     @staticmethod
+    def init_params(key, input_dim, output_dim, degree, kind=2):
+        mean = 0
+        std = 1/(input_dim * (degree + 1))
+        coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree+1))
+        assert kind in {1, 2}
+        trainable_params = {"coeffs": coeffs}
+        return {"kind": kind}, trainable_params
+
+    @staticmethod
+    def network_fn(all_params, x):
+        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+        kind = all_params["static"]["network"]["subdomain"]["kind"]
+        return ChebyshevKAN.forward(coeffs, kind, x)
+
+    @staticmethod
+    def forward(coeffs, kind, x):
+        input_dim = coeffs.shape[0]
+        degree = coeffs.shape[-1] - 1
+
+        x = jnp.tanh(x)
+        batch_size = x.shape[0]
+
+        cheb = jnp.ones((batch_size, input_dim, degree + 1))
+        if degree >= 1:
+            # initialisation based on first or second polynomial kind
+            cheb = cheb.at[:, :, 1].set(kind * x)
+        for d in range(2, degree + 1):
+            cheb = cheb.at[:, :, d].set(2 * x * cheb[:, :, d - 1] - cheb[:, :, d - 2])
+
+        y = jnp.einsum("bid,iod->bo", cheb, coeffs)
+        y = y if len(x.shape) > 1 else y[0]
+        return y
+    
+class LegendreKAN(Network):
+    "Legendre polynomials"
+
+    @staticmethod
     def init_params(key, input_dim, output_dim, degree):
         mean = 0
         std = 1/(input_dim * (degree + 1))
@@ -48,7 +85,7 @@ class ChebyshevKAN(Network):
     @staticmethod
     def network_fn(all_params, x):
         coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
-        return ChebyshevKAN.forward(coeffs, x)
+        return LegendreKAN.forward(coeffs, x)
 
     @staticmethod
     def forward(coeffs, x):
@@ -60,9 +97,9 @@ class ChebyshevKAN(Network):
 
         cheb = jnp.ones((batch_size, input_dim, degree + 1))
         if degree >= 1:
-            cheb = cheb.at[:, :, 1].set(2 * x)
+            cheb = cheb.at[:, :, 1].set(x)
         for d in range(2, degree + 1):
-            cheb = cheb.at[:, :, d].set(2 * x * cheb[:, :, d - 1] - cheb[:, :, d - 2])
+            cheb = cheb.at[:, :, d].set( ((2 * (d-1) + 1) / (d)) * x * cheb[:, :, d - 1] - ((d-1) / (d)) * cheb[:, :, d - 2])
 
         y = jnp.einsum("bid,iod->bo", cheb, coeffs)
         y = y if len(x.shape) > 1 else y[0]
@@ -102,7 +139,6 @@ class FCN(Network):
             x = jnp.tanh(x)
             print(x.shape)
         w, b = params[-1]
-        print(x.shape)
         x = jnp.dot(w, x) + b
         return x
 

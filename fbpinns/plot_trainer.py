@@ -21,7 +21,6 @@ def plot(trainer, dims, *args):
     "Plots FBPINN and PINN results"
 
     nx = dims[1]
-    print(dims, nx)
     if trainer in _plotters and nx in _plotters[trainer]:
         return _plotters[trainer][nx](*args)
     else:
