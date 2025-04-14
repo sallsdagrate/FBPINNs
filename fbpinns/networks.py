@@ -9,6 +9,7 @@ This module is used by constants.py (and subsequently trainers.py)
 
 import jax.numpy as jnp
 from jax import random
+import jax
 
 
 class Network:
@@ -33,7 +34,47 @@ class Network:
         """Forward model, for a SINGLE point with shape (xd,)"""
         raise NotImplementedError
 
+class ChebyshevAdaptiveKAN(Network):
+    "Chebyshev polynomials"
 
+    @staticmethod
+    def init_params(key, input_dim, output_dim, degree, kind=2):
+        mean = 0
+        std = 1/(input_dim * (degree + 1))
+        coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree+1))
+        a = jnp.ones((degree+1))
+        assert kind in {1, 2}
+        trainable_params = {"coeffs": coeffs, "a": a}
+        return {"kind": kind}, trainable_params
+
+    @staticmethod
+    def network_fn(all_params, x):
+        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+        kind = all_params["static"]["network"]["subdomain"]["kind"]
+        a = all_params["trainable"]["network"]["subdomain"]["a"]
+        return ChebyshevAdaptiveKAN.forward(coeffs, kind, a, x)
+
+    @staticmethod
+    def forward(coeffs, kind, a, x):
+        input_dim = coeffs.shape[0]
+        degree = coeffs.shape[-1] - 1
+
+        # x = jnp.tanh(x)
+        batch_size = x.shape[0]
+
+        cheb = jnp.ones((batch_size, input_dim, degree + 1))
+        if degree >= 1:
+            # initialisation based on first or second polynomial kind
+            xa = a[0] * jnp.tanh(x/a[0])
+            cheb = cheb.at[:, :, 1].set(kind * xa)
+        for d in range(2, degree + 1):
+            xa = a[d] * jnp.tanh(x/a[d])
+            cheb = cheb.at[:, :, d].set(2 * xa * cheb[:, :, d - 1] - cheb[:, :, d - 2])
+
+        y = jnp.einsum("bid,iod->bo", cheb, coeffs)
+        y = y if len(x.shape) > 1 else y[0]
+        return y
+    
 class ChebyshevKAN(Network):
     "Chebyshev polynomials"
 
@@ -291,3 +332,60 @@ if __name__ == "__main__":
         params = {"static":{"network":{"subdomain":ps_[0]}},
                   "trainable":{"network":{"subdomain":ps_[1]}}}
         print(x.shape, network.network_fn(params, x).shape, NN.__name__)
+
+
+# class ChebyshevResKAN(Network):
+#     "Chebyshev polynomials with a residual connection from x via a learned projection."
+
+#     @staticmethod
+#     def init_params(key, input_dim, output_dim, degree, kind=2):
+#         # Initialize coefficients for the Chebyshev basis as before.
+#         mean = 0.0
+#         std = 1/(input_dim * (degree + 1))
+#         coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree + 1))
+#         # Additional parameters for the residual branch that projects x from input_dim to output_dim.
+#         res_key, key = random.split(key)
+#         W_res = random.normal(res_key, (input_dim, output_dim)) * (1.0 / input_dim)
+#         b_res = jnp.zeros((output_dim,))
+#         trainable_params = {
+#             "coeffs": coeffs,
+#             "W_res": W_res,
+#             "b_res": b_res,
+#         }
+#         # "kind" is treated as a static parameter.
+#         return {"kind": kind}, trainable_params
+
+#     @staticmethod
+#     def network_fn(all_params, x):
+#         coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+#         W_res = all_params["trainable"]["network"]["subdomain"]["W_res"]
+#         b_res = all_params["trainable"]["network"]["subdomain"]["b_res"]
+#         kind = all_params["static"]["network"]["subdomain"]["kind"]
+#         poly_out = ChebyshevKAN.forward(coeffs, kind, x)
+#         # Compute the residual projection: shape (batch_size, output_dim)
+#         res_proj = jnp.tanh(jnp.dot(x, W_res) + b_res)
+#         # Add the residual to the polynomial output.
+#         # Note: the transformation applied to x in the polynomial branch is tanh(x),
+#         # which we can also mimic in the residual branch (or not) depending on what works best.
+#         return poly_out + res_proj
+
+#     @staticmethod
+#     def forward(coeffs, kind, x):
+#         input_dim = coeffs.shape[0]
+#         degree = coeffs.shape[-1] - 1
+
+#         # Apply a non-linear squashing function to x (as in the original code) for the polynomial branch.
+#         # Note: The residual branch in our example uses the raw x; but alternatively, one could use a non-linear version.
+#         x_poly = jnp.tanh(x)
+#         batch_size = x_poly.shape[0]
+
+#         # Initialize the Chebyshev basis: shape (batch_size, input_dim, degree+1)
+#         basis = jnp.ones((batch_size, input_dim, degree + 1))
+#         if degree >= 1:
+#             basis = basis.at[:, :, 1].set(kind * x_poly)
+#         for d in range(2, degree + 1):
+#             basis = basis.at[:, :, d].set(2 * x_poly * basis[:, :, d - 1] - basis[:, :, d - 2])
+            
+#         # Compute the polynomial output using Einstein summation.
+#         poly_out = jnp.einsum("bid,iod->bo", basis, coeffs)
+#         return poly_out

@@ -796,9 +796,9 @@ class FBPINNTrainer(_Trainer):
             if fs is not None:
                 self._save_figs(i, fs)
 
-                # jnp.save(f'saved_arrays/sch_2_exact_{u_out}_{i}.npy', u_exact)
-                # jnp.save(f'saved_arrays/sch_test_{u_out}_{i}.npy', u_test)
-                # logger.info('saved arrays')
+            #     jnp.save(f'saved_arrays/sch_2_exact_{u_out}_{i}.npy', u_exact)
+            #     jnp.save(f'saved_arrays/sch_2_test_{u_out}_{i}.npy', u_test)
+            #     logger.info('saved arrays')
 
         return u_test_losses
 
