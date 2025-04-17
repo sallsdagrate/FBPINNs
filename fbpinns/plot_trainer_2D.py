@@ -60,6 +60,13 @@ def plot_2D_FBPINN(x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test,
     plt.legend(loc=1)
     plt.xlim(-5,5)
 
+    # plot RBA attention weights
+    alpha = all_params["trainable"]["problem"]["alpha"]
+    plt.subplot(3,2,6)
+    plt.title(f"[{i}] Attention weights")
+    _plot_test_im(alpha, xlim0, ulim, n_test)
+
+
     plt.tight_layout()
 
     return (("test",f),)
@@ -99,6 +106,13 @@ def plot_2D_PINN(x_batch_test, u_exact, u_test, u_raw_test, x_batch, all_params,
     plt.hist(u_raw_test.flatten(), bins=100, label=f"{u_raw_test.min():.1f}, {u_raw_test.max():.1f}")
     plt.legend(loc=1)
     plt.xlim(-5,5)
+
+    # plot RBA attention weights
+    alpha = all_params["trainable"]["problem"]["alpha"]
+    plt.subplot(3,2,6)
+    plt.title(f"[{i}] Attention weights")
+    _plot_test_im(alpha, xlim0, ulim, n_test)
+
 
     plt.tight_layout()
 

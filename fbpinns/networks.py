@@ -65,10 +65,10 @@ class ChebyshevAdaptiveKAN(Network):
         cheb = jnp.ones((batch_size, input_dim, degree + 1))
         if degree >= 1:
             # initialisation based on first or second polynomial kind
-            xa = a[0] * jnp.tanh(x/a[0])
+            xa = jnp.tanh(x/a[0]) # a[0] * 
             cheb = cheb.at[:, :, 1].set(kind * xa)
         for d in range(2, degree + 1):
-            xa = a[d] * jnp.tanh(x/a[d])
+            xa = jnp.tanh(x/a[d]) # a[d] * 
             cheb = cheb.at[:, :, d].set(2 * xa * cheb[:, :, d - 1] - cheb[:, :, d - 2])
 
         y = jnp.einsum("bid,iod->bo", cheb, coeffs)

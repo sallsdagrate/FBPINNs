@@ -22,6 +22,11 @@ from fbpinns import networks, plot_trainer
 from fbpinns.util.logger import logger
 from fbpinns.util.jax_util import tree_index, total_size, str_tensor, partition, combine
 
+# RBA hyperparameters (choose these)
+eta = 1e-2
+gamma = 0.99
+c_lower = 0 #1e-6
+
 
 # LABELLING CONVENTIONS
 
@@ -280,7 +285,64 @@ def PINN_loss(active_params, static_params, constraints, model_fns, jmapss, loss
         x_batch = constraint[0]
         ujs = PINN_forward(all_params, x_batch, model_fns, jmaps)
         constraints_.append(constraint+ujs)
-    return loss_fn(all_params, constraints_)
+    return loss_fn(all_params, constraints_) # loss and residual
+
+# @partial(jit, static_argnums=(0, 5, 8, 9, 10))
+# def FBPINN_update(optimiser_fn, active_opt_states,
+#                   active_params, fixed_params, static_params_dynamic, static_params_static,
+#                   takess, constraints, model_fns, jmapss, loss_fn):
+#     # recombine static params
+#     static_params = combine(static_params_dynamic, static_params_static)
+#     # update step
+#     lossval, grads = value_and_grad(FBPINN_loss, argnums=0)(
+#         active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn)
+#     updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
+#     active_params = optax.apply_updates(active_params, updates)
+    
+#     return lossval, active_opt_states, active_params
+
+# @partial(jit, static_argnums=(0, 4, 6, 7, 8))
+# def PINN_update(optimiser_fn, active_opt_states,
+#                 active_params, static_params_dynamic, static_params_static,
+#                 constraints, model_fns, jmapss, loss_fn):
+#     # recombine static params
+#     static_params = combine(static_params_dynamic, static_params_static)
+#     # update step
+#     lossval, grads = value_and_grad(PINN_loss, argnums=0)(
+#         active_params, static_params, constraints, model_fns, jmapss, loss_fn)
+#     updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
+#     active_params = optax.apply_updates(active_params, updates)
+#     return lossval, active_opt_states, active_params
+# from jax import jit, value_and_grad
+# import jax.numpy as jnp
+
+
+@partial(jit, static_argnums=(0, 4, 6, 7, 8))
+def PINN_update(optimiser_fn, active_opt_states, active_params, static_params_dynamic, static_params_static, constraints, model_fns, jmapss, loss_fn):
+    # 1) rebuild full static dict
+    static_params = combine(static_params_dynamic, static_params_static)
+
+    # 2) run forward pass: get (loss, residuals) as aux, plus grads wrt active_params
+    (lossval, residuals), grads = value_and_grad(
+        PINN_loss, argnums=0, has_aux=True)(
+            active_params, static_params, constraints, model_fns, jmapss, loss_fn)
+
+    # freeze alpha gradient
+    grads['problem']['alpha'] = jnp.zeros_like(grads['problem']['alpha'])# set alpha gradient to zero
+
+    # 3) apply gradient‐based update for the network weights
+    updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
+    active_params = optax.apply_updates(active_params, updates)
+
+    print('static', static_params)
+    # 4) now update the RBA alphas in‐place
+    alpha_old = active_params["problem"]["alpha"]   # shape (N,1)
+    r_abs     = jnp.abs(residuals)                              # same shape
+    r_max     = jnp.max(r_abs)
+    alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
+    # alpha_new = alpha_new + c_lower
+    active_params["problem"]["alpha"] = alpha_new
+    return lossval, active_opt_states, active_params
 
 @partial(jit, static_argnums=(0, 5, 8, 9, 10))
 def FBPINN_update(optimiser_fn, active_opt_states,
@@ -289,23 +351,22 @@ def FBPINN_update(optimiser_fn, active_opt_states,
     # recombine static params
     static_params = combine(static_params_dynamic, static_params_static)
     # update step
-    lossval, grads = value_and_grad(FBPINN_loss, argnums=0)(
+    (lossval, residuals), grads = value_and_grad(FBPINN_loss, argnums=0, has_aux=True)(
         active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn)
+    
+    # freeze alpha gradient
+    grads['problem']['alpha'] = jnp.zeros_like(grads['problem']['alpha'])# set alpha gradient to zero
+    
     updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
     active_params = optax.apply_updates(active_params, updates)
-    return lossval, active_opt_states, active_params
 
-@partial(jit, static_argnums=(0, 4, 6, 7, 8))
-def PINN_update(optimiser_fn, active_opt_states,
-                active_params, static_params_dynamic, static_params_static,
-                constraints, model_fns, jmapss, loss_fn):
-    # recombine static params
-    static_params = combine(static_params_dynamic, static_params_static)
-    # update step
-    lossval, grads = value_and_grad(PINN_loss, argnums=0)(
-        active_params, static_params, constraints, model_fns, jmapss, loss_fn)
-    updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
-    active_params = optax.apply_updates(active_params, updates)
+    # 4) now update the RBA alphas in‐place
+    alpha_old = active_params["problem"]["alpha"]   # shape (N,1)
+    r_abs     = jnp.abs(residuals)                              # same shape
+    r_max     = jnp.max(r_abs)
+    alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
+    active_params["problem"]["alpha"] = alpha_new
+    
     return lossval, active_opt_states, active_params
 
 
