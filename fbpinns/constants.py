@@ -90,6 +90,8 @@ class Constants(ConstantsBase):
         self.save_figures = False# whether to save figures
         self.clear_output = False# whether to clear ipython output periodically
 
+        self.attention_weights = False
+
         # other constants
         self.hostname = socket.gethostname().lower()
 

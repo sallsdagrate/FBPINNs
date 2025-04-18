@@ -253,6 +253,8 @@ def jacfwd(f, v):
 
 def FBPINN_loss(active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn):
 
+    jax.debug.print('FBPINN_loss {a}', a=active_params["problem"]["current_i"])
+
     # add fixed params to active, recombine all_params
     d, da = active_params, fixed_params
     trainable_params = {cl_k: {k: jax.tree_map(lambda p1, p2:jnp.concatenate([p1,p2],0), d[cl_k][k], da[cl_k][k]) if k=="subdomain" else d[cl_k][k]
@@ -317,12 +319,12 @@ def PINN_loss(active_params, static_params, constraints, model_fns, jmapss, loss
 # import jax.numpy as jnp
 
 
-@partial(jit, static_argnums=(0, 4, 6, 7, 8))
-def PINN_update(optimiser_fn, active_opt_states, active_params, static_params_dynamic, static_params_static, constraints, model_fns, jmapss, loss_fn):
-    # 1) rebuild full static dict
+@partial(jit, static_argnums=(0, 4, 6, 7, 8, 9))
+def PINN_update(optimiser_fn, active_opt_states, 
+                active_params, static_params_dynamic, static_params_static, 
+                constraints, model_fns, jmapss, loss_fn, attention_weights):
     static_params = combine(static_params_dynamic, static_params_static)
 
-    # 2) run forward pass: get (loss, residuals) as aux, plus grads wrt active_params
     (lossval, residuals), grads = value_and_grad(
         PINN_loss, argnums=0, has_aux=True)(
             active_params, static_params, constraints, model_fns, jmapss, loss_fn)
@@ -330,43 +332,58 @@ def PINN_update(optimiser_fn, active_opt_states, active_params, static_params_dy
     # freeze alpha gradient
     grads['problem']['alpha'] = jnp.zeros_like(grads['problem']['alpha'])# set alpha gradient to zero
 
-    # 3) apply gradient‐based update for the network weights
     updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
     active_params = optax.apply_updates(active_params, updates)
 
-    print('static', static_params)
-    # 4) now update the RBA alphas in‐place
-    alpha_old = active_params["problem"]["alpha"]   # shape (N,1)
-    r_abs     = jnp.abs(residuals)                              # same shape
-    r_max     = jnp.max(r_abs)
-    alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
-    # alpha_new = alpha_new + c_lower
-    active_params["problem"]["alpha"] = alpha_new
+    if attention_weights:
+        # 4) now update the RBA alphas in‐place
+        alpha_old = active_params["problem"]["alpha"]   # shape (N,1)
+        r_abs     = jnp.abs(residuals)                              # same shape
+        r_max     = jnp.max(r_abs)
+        alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
+        active_params["problem"]["alpha"] = alpha_new
     return lossval, active_opt_states, active_params
 
-@partial(jit, static_argnums=(0, 5, 8, 9, 10))
+@partial(jit, static_argnums=(0, 5, 8, 9, 10, 11))
 def FBPINN_update(optimiser_fn, active_opt_states,
                   active_params, fixed_params, static_params_dynamic, static_params_static,
-                  takess, constraints, model_fns, jmapss, loss_fn):
+                  takess, constraints, model_fns, jmapss, loss_fn, attention_weights, i):
     # recombine static params
     static_params = combine(static_params_dynamic, static_params_static)
+    
+    active_params['problem']['current_i'] = active_params['problem']['current_i'].at[0].set(jnp.float32(i)) # set current_i to i
     # update step
     (lossval, residuals), grads = value_and_grad(FBPINN_loss, argnums=0, has_aux=True)(
         active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn)
     
     # freeze alpha gradient
-    grads['problem']['alpha'] = jnp.zeros_like(grads['problem']['alpha'])# set alpha gradient to zero
+    grads['problem']['alpha'] = jnp.zeros_like(grads['problem']['alpha'])
+    # grads['problem'].pop('current_i', None)
+    grads['problem']['current_i'] = jnp.zeros_like(grads['problem']['current_i'])
+    grads['problem'].pop('selected', None)
+
+    jax.debug.print('active1 {a}, {b}', a=active_params["problem"]["current_i"], b=i)
+
+    selected = active_params['problem'].pop('selected', None)
+    # curr_i = active_params['problem'].pop('current_i', 0.)
     
+    print(grads, active_opt_states, active_params)
     updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
     active_params = optax.apply_updates(active_params, updates)
 
-    # 4) now update the RBA alphas in‐place
-    alpha_old = active_params["problem"]["alpha"]   # shape (N,1)
-    r_abs     = jnp.abs(residuals)                              # same shape
-    r_max     = jnp.max(r_abs)
-    alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
-    active_params["problem"]["alpha"] = alpha_new
-    
+    # now update the RBA alphas in‐place
+    if attention_weights:
+        selected = selected.astype(jnp.int32)
+        alpha_old = active_params["problem"]["alpha"][selected]   # shape (N,1)
+        r_abs     = jnp.abs(residuals)                              # same shape
+        r_max     = jnp.max(r_abs)
+        alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
+        active_params["problem"]["alpha"] = active_params["problem"]["alpha"].at[selected].set(alpha_new)
+
+    # reinsert selected after popping (jitted function must have same signature)
+    active_params["problem"]["selected"] = selected.astype(jnp.float32)
+    # active_params["problem"]["current_i"] = curr_i.astype(jnp.float32)
+
     return lossval, active_opt_states, active_params
 
 
@@ -547,6 +564,7 @@ class FBPINNTrainer(_Trainer):
         ims = jnp.arange(all_params["static"]["decomposition"]["m"])[active==1]
         training_ips, _d = decomposition.inside_models(all_params, x_batch_global, ims)# (n, mc)
         x_batch = x_batch_global[training_ips]
+        all_params["trainable"]["problem"]["selected"] = training_ips.copy().astype(jnp.float32)
 
         # report
         logger.info(f"[i: {i}/{self.c.n_steps}] Average number of points/dimension in active subdomains: {_d:.2f}")
@@ -659,6 +677,8 @@ class FBPINNTrainer(_Trainer):
                 all_params["static"]["problem"]["dims"][1] ==\
                 all_params["static"]["decomposition"]["xd"])
         logger.info(f'Total number of subdomains: {all_params["static"]["decomposition"]["m"]}')
+        
+        all_params["trainable"]["problem"]["current_i"] = jnp.ones(1).astype(jnp.float32)
 
         # initialise subdomain network params
         network = c.network
@@ -690,7 +710,9 @@ class FBPINNTrainer(_Trainer):
         start0, start1, report_time = time.time(), time.time(), 0.
         merge_active, active_params, active_opt_states, fixed_params = None, None, None, None
         lossval = None
-        for i,active_ in enumerate(scheduler):
+        for i, active_ in enumerate(scheduler):
+                
+            all_params["trainable"]["problem"]["current_i"] = all_params["trainable"]["problem"]["current_i"].at[0].set(i) # update current i in params
 
             # update active
             if active_ is not None:
@@ -704,14 +726,15 @@ class FBPINNTrainer(_Trainer):
                 # then get new inputs to update step
                 active, merge_active, active_opt_states, active_params, fixed_params, static_params, takess, constraints, x_batch = \
                      self._get_update_inputs(i, active, all_params, all_opt_states, x_batch_global, constraints_global, constraint_fs_global, constraint_offsets_global, decomposition, problem)
-
+                
                 # AOT compile update function
                 startc = time.time()
                 logger.info(f"[i: {i}/{self.c.n_steps}] Compiling update step..")
                 static_params_dynamic, static_params_static = partition(static_params)
                 update = FBPINN_update.lower(optimiser_fn, active_opt_states,
                                              active_params, fixed_params, static_params_dynamic, static_params_static,
-                                             takess, constraints, model_fns, jmapss, loss_fn).compile()
+                                             takess, constraints, model_fns, jmapss, loss_fn, c.attention_weights, i).compile()
+
                 logger.info(f"[i: {i}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
                 cost_ = update.cost_analysis()
                 p,f = total_size(active_params["network"]), cost_["flops"] if (cost_ and "flops" in cost_) else 0
@@ -725,11 +748,14 @@ class FBPINNTrainer(_Trainer):
                             u_exact, x_batch_test, test_inputs, all_params, all_opt_states, model_fns, problem, decomposition,
                             active, merge_active, active_opt_states, active_params, x_batch,
                             lossval)
+            
+            jax.debug.print('{a}', a=active_params["problem"]["current_i"])
+            print('i2', i, all_params["trainable"]["problem"]["current_i"])
 
             # take a training step
             lossval, active_opt_states, active_params = update(active_opt_states,
                                          active_params, fixed_params, static_params_dynamic,
-                                         takess, constraints)# note compiled function only accepts dynamic arguments
+                                         takess, constraints, i)# note compiled function only accepts dynamic arguments
             pstep, fstep = pstep+p, fstep+f
 
             # report
@@ -833,7 +859,6 @@ class FBPINNTrainer(_Trainer):
         if i % (c.test_freq * 5) == 0:
             # logger.info('dims', all_params["static"]["problem"]["dims"])
             ud = all_params["static"]["problem"]["dims"][0]
-            print(x_batch_test.shape, u_exact.shape, u_test.shape, us_test.shape, ws_test.shape, us_raw_test.shape, x_batch.shape, n_test)
             if ud > 1:
                 for u_out in range(ud):
 
@@ -924,7 +949,7 @@ class PINNTrainer(_Trainer):
         static_params_dynamic, static_params_static = partition(static_params)
         update = PINN_update.lower(optimiser_fn, active_opt_states,
                                    active_params, static_params_dynamic, static_params_static,
-                                   constraints, model_fns, jmapss, loss_fn).compile()
+                                   constraints, model_fns, jmapss, loss_fn, c.attention_weights).compile()
         logger.info(f"[i: {0}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
         cost_ = update.cost_analysis()
         p,f = total_size(active_params["network"]), cost_["flops"] if (cost_ and "flops" in cost_) else 0
