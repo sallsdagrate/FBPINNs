@@ -12,7 +12,10 @@ import socket
 import numpy as np
 import optax
 
-from fbpinns import domains, problems, decompositions, networks, schedulers
+from functools import reduce
+from operator import mul
+
+from fbpinns import domains, problems, decompositions, networks, schedulers, attention
 from fbpinns.constants_base import ConstantsBase
 
 
@@ -90,15 +93,19 @@ class Constants(ConstantsBase):
         self.save_figures = False# whether to save figures
         self.clear_output = False# whether to clear ipython output periodically
 
-        self.attention_weights = False
+        self.attention_tracker = attention.RBAttention
+        self.attention_tracking_kwargs=dict(
+            eta_lr = 1e-2,
+            gamma_decay = 0.99,
+            N=10000,
+            out_dim=1,
+        )
 
         # other constants
         self.hostname = socket.gethostname().lower()
 
         # overwrite with input arguments
         for key in kwargs.keys(): self[key] = kwargs[key]# invokes __setitem__ in ConstantsBase
-
-
 
 if __name__ == "__main__":
 

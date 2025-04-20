@@ -23,9 +23,7 @@ from fbpinns.util.logger import logger
 from fbpinns.util.jax_util import tree_index, total_size, str_tensor, partition, combine
 
 # RBA hyperparameters (choose these)
-eta = 1e-2
-gamma = 0.99
-c_lower = 0 #1e-6
+
 
 
 # LABELLING CONVENTIONS
@@ -253,8 +251,6 @@ def jacfwd(f, v):
 
 def FBPINN_loss(active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn):
 
-    jax.debug.print('FBPINN_loss {a}', a=active_params["problem"]["current_i"])
-
     # add fixed params to active, recombine all_params
     d, da = active_params, fixed_params
     trainable_params = {cl_k: {k: jax.tree_map(lambda p1, p2:jnp.concatenate([p1,p2],0), d[cl_k][k], da[cl_k][k]) if k=="subdomain" else d[cl_k][k]
@@ -322,67 +318,60 @@ def PINN_loss(active_params, static_params, constraints, model_fns, jmapss, loss
 @partial(jit, static_argnums=(0, 4, 6, 7, 8, 9))
 def PINN_update(optimiser_fn, active_opt_states, 
                 active_params, static_params_dynamic, static_params_static, 
-                constraints, model_fns, jmapss, loss_fn, attention_weights):
+                constraints, model_fns, jmapss, loss_fn, attention_tracker, i):
     static_params = combine(static_params_dynamic, static_params_static)
+
+    active_params['problem']['current_i'] = active_params['problem']['current_i'].at[0].set(jnp.float32(i)) # set current_i to i
 
     (lossval, residuals), grads = value_and_grad(
         PINN_loss, argnums=0, has_aux=True)(
             active_params, static_params, constraints, model_fns, jmapss, loss_fn)
 
-    # freeze alpha gradient
-    grads['problem']['alpha'] = jnp.zeros_like(grads['problem']['alpha'])# set alpha gradient to zero
+    # freeze attention gradient
+    # grads['problem']['attention'] = jnp.zeros_like(grads['problem']['attention'])# set attention gradient to zero
 
     updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
     active_params = optax.apply_updates(active_params, updates)
 
-    if attention_weights:
-        # 4) now update the RBA alphas in‐place
-        alpha_old = active_params["problem"]["alpha"]   # shape (N,1)
-        r_abs     = jnp.abs(residuals)                              # same shape
-        r_max     = jnp.max(r_abs)
-        alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
-        active_params["problem"]["alpha"] = alpha_new
+    if attention_tracker:
+        # now update the RBA attentions
+        active_params["attention"]["alpha"] = attention_tracker.step(active_params["attention"]["alpha"], residuals, static_params["attention"])
+
     return lossval, active_opt_states, active_params
 
 @partial(jit, static_argnums=(0, 5, 8, 9, 10, 11))
 def FBPINN_update(optimiser_fn, active_opt_states,
                   active_params, fixed_params, static_params_dynamic, static_params_static,
-                  takess, constraints, model_fns, jmapss, loss_fn, attention_weights, i):
+                  takess, constraints, model_fns, jmapss, loss_fn, attention_tracker, i):
     # recombine static params
     static_params = combine(static_params_dynamic, static_params_static)
     
     active_params['problem']['current_i'] = active_params['problem']['current_i'].at[0].set(jnp.float32(i)) # set current_i to i
+
     # update step
     (lossval, residuals), grads = value_and_grad(FBPINN_loss, argnums=0, has_aux=True)(
         active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn)
     
-    # freeze alpha gradient
-    grads['problem']['alpha'] = jnp.zeros_like(grads['problem']['alpha'])
-    # grads['problem'].pop('current_i', None)
-    grads['problem']['current_i'] = jnp.zeros_like(grads['problem']['current_i'])
+    # freeze attention gradient
+    if attention_tracker:
+        grads['problem']['attention'] = jnp.zeros_like(grads['problem']['attention'])
     grads['problem'].pop('selected', None)
-
-    jax.debug.print('active1 {a}, {b}', a=active_params["problem"]["current_i"], b=i)
+    grads['problem']['current_i'] = jnp.zeros_like(grads['problem']['current_i'])
 
     selected = active_params['problem'].pop('selected', None)
-    # curr_i = active_params['problem'].pop('current_i', 0.)
     
-    print(grads, active_opt_states, active_params)
     updates, active_opt_states = optimiser_fn(grads, active_opt_states, active_params)
     active_params = optax.apply_updates(active_params, updates)
 
-    # now update the RBA alphas in‐place
-    if attention_weights:
+    # now update the RBA attentions in‐place
+    if attention_tracker:
         selected = selected.astype(jnp.int32)
-        alpha_old = active_params["problem"]["alpha"][selected]   # shape (N,1)
-        r_abs     = jnp.abs(residuals)                              # same shape
-        r_max     = jnp.max(r_abs)
-        alpha_new = gamma*alpha_old + eta*(r_abs/(r_max+1e-12))
-        active_params["problem"]["alpha"] = active_params["problem"]["alpha"].at[selected].set(alpha_new)
+        attention_old = active_params["attention"]["alpha"][selected]
+        attention_new = attention_tracker.step(attention_old, residuals, static_params["attention"])
+        active_params["attention"]["alpha"] = active_params["attention"]["alpha"].at[selected].set(attention_new)
 
     # reinsert selected after popping (jitted function must have same signature)
     active_params["problem"]["selected"] = selected.astype(jnp.float32)
-    # active_params["problem"]["current_i"] = curr_i.astype(jnp.float32)
 
     return lossval, active_opt_states, active_params
 
@@ -666,9 +655,10 @@ class FBPINNTrainer(_Trainer):
         all_params = {"static":{},"trainable":{}}
 
         # initialise domain, problem and decomposition params
-        domain, problem, decomposition = c.domain, c.problem, c.decomposition
-        for tag, cl, kwargs in zip(["domain", "problem", "decomposition"], [domain, problem, decomposition],
-                                   [c.domain_init_kwargs, c.problem_init_kwargs, c.decomposition_init_kwargs]):
+        print(c.attention_tracking_kwargs)
+        domain, problem, decomposition, attention_tracker = c.domain, c.problem, c.decomposition, c.attention_tracker
+        for tag, cl, kwargs in zip(["domain", "problem", "decomposition", "attention"], [domain, problem, decomposition, attention_tracker],
+                                   [c.domain_init_kwargs, c.problem_init_kwargs, c.decomposition_init_kwargs, c.attention_tracking_kwargs]):
             ps_ = cl.init_params(**kwargs)
             if ps_[0]: all_params["static"][tag] = ps_[0]
             if ps_[1]: all_params["trainable"][tag] = ps_[1]
@@ -678,6 +668,8 @@ class FBPINNTrainer(_Trainer):
                 all_params["static"]["decomposition"]["xd"])
         logger.info(f'Total number of subdomains: {all_params["static"]["decomposition"]["m"]}')
         
+        if "problem" not in all_params["trainable"]:
+            all_params["trainable"]["problem"] = {}
         all_params["trainable"]["problem"]["current_i"] = jnp.ones(1).astype(jnp.float32)
 
         # initialise subdomain network params
@@ -710,12 +702,12 @@ class FBPINNTrainer(_Trainer):
         start0, start1, report_time = time.time(), time.time(), 0.
         merge_active, active_params, active_opt_states, fixed_params = None, None, None, None
         lossval = None
+        domain_i = 0
         for i, active_ in enumerate(scheduler):
                 
-            all_params["trainable"]["problem"]["current_i"] = all_params["trainable"]["problem"]["current_i"].at[0].set(i) # update current i in params
-
             # update active
             if active_ is not None:
+                domain_i = 0
                 active = active_
 
                 # first merge latest all_params / all_opt_states
@@ -733,13 +725,17 @@ class FBPINNTrainer(_Trainer):
                 static_params_dynamic, static_params_static = partition(static_params)
                 update = FBPINN_update.lower(optimiser_fn, active_opt_states,
                                              active_params, fixed_params, static_params_dynamic, static_params_static,
-                                             takess, constraints, model_fns, jmapss, loss_fn, c.attention_weights, i).compile()
+                                             takess, constraints, model_fns, jmapss, loss_fn, c.attention_tracker, domain_i).compile()
 
                 logger.info(f"[i: {i}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
                 cost_ = update.cost_analysis()
                 p,f = total_size(active_params["network"]), cost_["flops"] if (cost_ and "flops" in cost_) else 0
                 logger.debug("p, f")
                 logger.debug((p,f))
+                logger.info(f"curr {i}, decomp {domain_i}")
+
+            if not i % 100:
+                logger.info(f"curr {i}, decomp {domain_i}")
 
             # report initial model
             if i == 0:
@@ -749,13 +745,10 @@ class FBPINNTrainer(_Trainer):
                             active, merge_active, active_opt_states, active_params, x_batch,
                             lossval)
             
-            jax.debug.print('{a}', a=active_params["problem"]["current_i"])
-            print('i2', i, all_params["trainable"]["problem"]["current_i"])
-
             # take a training step
             lossval, active_opt_states, active_params = update(active_opt_states,
                                          active_params, fixed_params, static_params_dynamic,
-                                         takess, constraints, i)# note compiled function only accepts dynamic arguments
+                                         takess, constraints, domain_i)# note compiled function only accepts dynamic arguments
             pstep, fstep = pstep+p, fstep+f
 
             # report
@@ -764,6 +757,8 @@ class FBPINNTrainer(_Trainer):
                         u_exact, x_batch_test, test_inputs, all_params, all_opt_states, model_fns, problem, decomposition,
                         active, merge_active, active_opt_states, active_params, x_batch,
                         lossval)
+            
+            domain_i += 1
 
         # cleanup
         writer.close()
@@ -908,14 +903,18 @@ class PINNTrainer(_Trainer):
         all_params = {"static":{},"trainable":{}}
 
         # initialise domain, problem and decomposition params
-        domain, problem = c.domain, c.problem
-        for tag, cl, kwargs in zip(["domain", "problem"], [domain, problem],
-                                   [c.domain_init_kwargs, c.problem_init_kwargs]):
+        domain, problem, attention_tracker = c.domain, c.problem, c.attention_tracker
+        for tag, cl, kwargs in zip(["domain", "problem", "attention"], [domain, problem, attention_tracker],
+                                   [c.domain_init_kwargs, c.problem_init_kwargs, c.attention_tracking_kwargs]):
             ps_ = cl.init_params(**kwargs)
             if ps_[0]: all_params["static"][tag] = ps_[0]
             if ps_[1]: all_params["trainable"][tag] = ps_[1]
         assert (all_params["static"]["domain"]["xd"] ==\
                 all_params["static"]["problem"]["dims"][1])
+        
+        if "problem" not in all_params["trainable"]:
+            all_params["trainable"]["problem"] = {}
+        all_params["trainable"]["problem"]["current_i"] = jnp.ones(1).astype(jnp.float32)
 
         # initialise network params
         network = c.network
@@ -949,7 +948,7 @@ class PINNTrainer(_Trainer):
         static_params_dynamic, static_params_static = partition(static_params)
         update = PINN_update.lower(optimiser_fn, active_opt_states,
                                    active_params, static_params_dynamic, static_params_static,
-                                   constraints, model_fns, jmapss, loss_fn, c.attention_weights).compile()
+                                   constraints, model_fns, jmapss, loss_fn, c.attention_tracker, 0).compile()
         logger.info(f"[i: {0}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
         cost_ = update.cost_analysis()
         p,f = total_size(active_params["network"]), cost_["flops"] if (cost_ and "flops" in cost_) else 0
@@ -974,7 +973,7 @@ class PINNTrainer(_Trainer):
             # take a training step
             lossval, active_opt_states, active_params = update(active_opt_states,
                                        active_params, static_params_dynamic,
-                                       constraints)# note compiled function only accepts dynamic arguments
+                                       constraints, i)# note compiled function only accepts dynamic arguments
             pstep, fstep = pstep+p, fstep+f
 
             # report
