@@ -535,6 +535,93 @@ class WaveEquationGaussianVelocity3D(WaveEquationConstantVelocity3D):
         f = (p[:,:,3:4]*exp(-0.5 * ((x-p[:,:,0:2])**2).sum(2, keepdims=True)/(p[:,:,2:3]**2))).sum(0)# (n, 1)
         c = c0 + f# (n, 1)
         return c
+    
+class HarmonicOscillator1D(Problem):
+    """Solves the time-dependent damped harmonic oscillator using hard boundary conditions
+          d^2 u      du
+        m ----- + mu -- + ku = 0
+          dt^2       dt
+
+        Boundary conditions:
+        u (0) = 1
+        u'(0) = 0
+    """
+
+    @staticmethod
+    def init_params(d=2, w0=20, sd=0.1):
+
+        mu, k = 2*d, w0**2
+
+        static_params = {
+            "dims":(1,1),
+            "d":d,
+            "w0":w0,
+            "mu":mu,
+            "k":k,
+            "sd":sd,
+            }
+
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+
+        x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        required_ujs_phys = (
+            (0,()),
+            (0,(0,)),
+            (0,(0,0))
+        )
+        return [[x_batch_phys, required_ujs_phys],]
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, u):
+
+        sd = all_params["static"]["problem"]["sd"]
+        x, tanh = x_batch[:,0:1], jnp.tanh
+
+        u = 1 + (tanh(x/sd)**2) * u# applies hard BCs
+        return u
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+
+        mu, k = all_params["static"]["problem"]["mu"], all_params["static"]["problem"]["k"]
+
+        _, u, ut, utt = constraints[0]
+        phys = utt + mu*ut + k*u
+        mse = jnp.mean((phys)**2)
+
+        return mse, phys
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+
+        d, w0 = all_params["static"]["problem"]["d"], all_params["static"]["problem"]["w0"]
+
+        w = jnp.sqrt(w0**2-d**2)
+        phi = jnp.arctan(-d/w)
+        A = 1/(2*jnp.cos(phi))
+        cos = jnp.cos(phi + w * x_batch)
+        exp = jnp.exp(-d * x_batch)
+        u = exp * 2 * A * cos
+
+        return u
+
+class HarmonicOscillator1DAttention(HarmonicOscillator1D):
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+
+        mu, k = all_params["static"]["problem"]["mu"], all_params["static"]["problem"]["k"]
+
+        _, u, ut, utt = constraints[0]
+        phys = utt + mu*ut + k*u
+        mse = jnp.mean((phys)**2)
+
+        Problem.attention_print(all_params, mse, 0, phys)
+
+        return mse, phys
 
 
 if __name__ == "__main__":

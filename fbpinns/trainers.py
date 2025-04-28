@@ -678,6 +678,7 @@ class FBPINNTrainer(_Trainer):
             'mse': [],
             'param_count': [],
             'flops': [],
+            'training_time': 0,
         }
 
         # initialise subdomain network params
@@ -774,8 +775,10 @@ class FBPINNTrainer(_Trainer):
         # cleanup
         writer.close()
         logger.info(f"[i: {i+1}/{self.c.n_steps}] Training complete")
-        logger.info(f"[i: {i+1}/{self.c.n_steps}] Total training time: {time.time()-train_time:.2f} s")
-
+        total_training_time = time.time()-train_time
+        logger.info(f"[i: {i+1}/{self.c.n_steps}] Total training time: {total_training_time:.2f} s")
+        metrics['training_time'] = total_training_time
+        
         # return trained parameters
         all_params["trainable"] = merge_active(active_params, all_params["trainable"])
         all_opt_states = tree_map_dicts(merge_active, active_opt_states, all_opt_states)
@@ -884,15 +887,15 @@ class FBPINNTrainer(_Trainer):
                         n_test
                         )
                     
-                    jnp.save(f'saved_arrays/harm_osc_1_{u_out}.npy', u_exact)
-                    jnp.save(f'saved_arrays/harm_osc_1_{u_out}_{i}.npy', u_test)
+                    jnp.save(f'results/saved_arrays/test_exact_{u_out}.npy', u_exact)
+                    jnp.save(f'results/saved_arrays/test_{u_out}_{i}.npy', u_test)
                     logger.info('saved arrays')
 
             else:
                 fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"], x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test, x_batch, all_params, i, active, decomposition, n_test)
                 
-                jnp.save(f'saved_arrays/harm_osc/a_harm_osc_1_exact.npy', u_exact)
-                jnp.save(f'saved_arrays/harm_osc/a_harm_osc_1_{i}.npy', u_test)
+                jnp.save(f'results/saved_arrays/test_exact.npy', u_exact)
+                jnp.save(f'results/saved_arrays/test_{i}.npy', u_test)
                 logger.info('saved arrays')
 
             if fs is not None:
