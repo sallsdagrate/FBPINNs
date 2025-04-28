@@ -61,6 +61,21 @@ class Problem:
         """Defines exact solution, if it exists"""
         raise NotImplementedError
 
+    @staticmethod
+    def do_print(all_params, mse, attn_loss, phys):
+        selected = all_params["trainable"]["problem"]["selected"].astype(jnp.int32)
+        attention = all_params["trainable"]["attention"]["alpha"][selected]  # (N,1)
+        current_i = all_params["trainable"]["problem"]["current_i"]
+
+        jax.debug.print("curr_i = {i}, mse = {m1:.6f}, attn = {m2:.6f}", i=current_i, m1=mse, m2=attn_loss)
+        jax.debug.print("residual max = {a}, attention head = {b}", a=jnp.max(jnp.abs(phys)), b=attention[:5, 0])
+        return None
+
+    @staticmethod
+    def attention_print(all_params, mse, attn_loss, phys):
+        # Conditionally invoke the debug-prints every 1000 steps
+        current_i = all_params["trainable"]["problem"]["current_i"]
+        _ = jax.lax.cond(current_i[0] % 1000 == 0, lambda _: Problem.do_print(all_params, mse, attn_loss, phys), lambda _: None, operand=None)
 
 
 

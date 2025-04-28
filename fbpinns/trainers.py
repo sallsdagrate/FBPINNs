@@ -353,8 +353,8 @@ def FBPINN_update(optimiser_fn, active_opt_states,
         active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn)
     
     # freeze attention gradient
-    if attention_tracker:
-        grads['problem']['attention'] = jnp.zeros_like(grads['problem']['attention'])
+    # if attention_tracker:
+    #     grads['problem']['attention'] = jnp.zeros_like(grads['problem']['attention'])
     grads['problem'].pop('selected', None)
     grads['problem']['current_i'] = jnp.zeros_like(grads['problem']['current_i'])
 
@@ -659,6 +659,7 @@ class FBPINNTrainer(_Trainer):
         domain, problem, decomposition, attention_tracker = c.domain, c.problem, c.decomposition, c.attention_tracker
         for tag, cl, kwargs in zip(["domain", "problem", "decomposition", "attention"], [domain, problem, decomposition, attention_tracker],
                                    [c.domain_init_kwargs, c.problem_init_kwargs, c.decomposition_init_kwargs, c.attention_tracking_kwargs]):
+            print(kwargs)
             ps_ = cl.init_params(**kwargs)
             if ps_[0]: all_params["static"][tag] = ps_[0]
             if ps_[1]: all_params["trainable"][tag] = ps_[1]
@@ -671,6 +672,13 @@ class FBPINNTrainer(_Trainer):
         if "problem" not in all_params["trainable"]:
             all_params["trainable"]["problem"] = {}
         all_params["trainable"]["problem"]["current_i"] = jnp.ones(1).astype(jnp.float32)
+
+        # initialising metrics
+        metrics = {
+            'mse': [],
+            'param_count': [],
+            'flops': [],
+        }
 
         # initialise subdomain network params
         network = c.network
@@ -699,7 +707,7 @@ class FBPINNTrainer(_Trainer):
 
         # train loop
         pstep, fstep, u_test_losses = 0, 0, []
-        start0, start1, report_time = time.time(), time.time(), 0.
+        start0, start1, report_time, train_time = time.time(), time.time(), 0., time.time()
         merge_active, active_params, active_opt_states, fixed_params = None, None, None, None
         lossval = None
         domain_i = 0
@@ -730,12 +738,14 @@ class FBPINNTrainer(_Trainer):
                 logger.info(f"[i: {i}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
                 cost_ = update.cost_analysis()
                 p,f = total_size(active_params["network"]), cost_["flops"] if (cost_ and "flops" in cost_) else 0
-                logger.debug("p, f")
-                logger.debug((p,f))
-                logger.info(f"curr {i}, decomp {domain_i}")
+                logger.info("p, f")
+                logger.info((p,f))
+                metrics['param_count'].append(p)
+                metrics['flops'].append(f)
+            #     logger.info(f"curr {i}, decomp {domain_i}")
 
-            if not i % 100:
-                logger.info(f"curr {i}, decomp {domain_i}")
+            # if not i % 100:
+            #     logger.info(f"curr {i}, decomp {domain_i}")
 
             # report initial model
             if i == 0:
@@ -758,17 +768,19 @@ class FBPINNTrainer(_Trainer):
                         active, merge_active, active_opt_states, active_params, x_batch,
                         lossval)
             
+            metrics['mse'].append(lossval.item())
             domain_i += 1
 
         # cleanup
         writer.close()
         logger.info(f"[i: {i+1}/{self.c.n_steps}] Training complete")
+        logger.info(f"[i: {i+1}/{self.c.n_steps}] Total training time: {time.time()-train_time:.2f} s")
 
         # return trained parameters
         all_params["trainable"] = merge_active(active_params, all_params["trainable"])
         all_opt_states = tree_map_dicts(merge_active, active_opt_states, all_opt_states)
 
-        return all_params
+        return all_params, metrics
 
     def _report(self, i, pstep, fstep, u_test_losses, start0, start1, report_time,
                 u_exact, x_batch_test, test_inputs, all_params, all_opt_states, model_fns, problem, decomposition,
@@ -871,15 +883,20 @@ class FBPINNTrainer(_Trainer):
                         decomposition, 
                         n_test
                         )
+                    
+                    jnp.save(f'saved_arrays/harm_osc_1_{u_out}.npy', u_exact)
+                    jnp.save(f'saved_arrays/harm_osc_1_{u_out}_{i}.npy', u_test)
+                    logger.info('saved arrays')
+
             else:
                 fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"], x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test, x_batch, all_params, i, active, decomposition, n_test)
+                
+                jnp.save(f'saved_arrays/harm_osc/a_harm_osc_1_exact.npy', u_exact)
+                jnp.save(f'saved_arrays/harm_osc/a_harm_osc_1_{i}.npy', u_test)
+                logger.info('saved arrays')
 
             if fs is not None:
                 self._save_figs(i, fs)
-
-            #     jnp.save(f'saved_arrays/sch_2_exact_{u_out}_{i}.npy', u_exact)
-            #     jnp.save(f'saved_arrays/sch_2_test_{u_out}_{i}.npy', u_test)
-            #     logger.info('saved arrays')
 
         return u_test_losses
 
@@ -952,8 +969,8 @@ class PINNTrainer(_Trainer):
         logger.info(f"[i: {0}/{self.c.n_steps}] Compiling done ({time.time()-startc:.2f} s)")
         cost_ = update.cost_analysis()
         p,f = total_size(active_params["network"]), cost_["flops"] if (cost_ and "flops" in cost_) else 0
-        logger.debug("p, f")
-        logger.debug((p,f))
+        logger.info("p, f")
+        logger.info((p,f))
 
         # train loop
         pstep, fstep, u_test_losses = 0, 0, []
