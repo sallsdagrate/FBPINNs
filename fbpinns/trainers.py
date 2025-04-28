@@ -655,15 +655,12 @@ class FBPINNTrainer(_Trainer):
         all_params = {"static":{},"trainable":{}}
 
         # initialise domain, problem and decomposition params
-        print(c.attention_tracking_kwargs)
         domain, problem, decomposition, attention_tracker = c.domain, c.problem, c.decomposition, c.attention_tracker
         for tag, cl, kwargs in zip(["domain", "problem", "decomposition", "attention"], [domain, problem, decomposition, attention_tracker],
                                    [c.domain_init_kwargs, c.problem_init_kwargs, c.decomposition_init_kwargs, c.attention_tracking_kwargs]):
-            print(kwargs)
             ps_ = cl.init_params(**kwargs)
             if ps_[0]: all_params["static"][tag] = ps_[0]
             if ps_[1]: all_params["trainable"][tag] = ps_[1]
-        print(all_params["static"]["domain"]["xd"],all_params["static"]["problem"]["dims"][1], all_params["static"]["decomposition"]["xd"])
         assert (all_params["static"]["domain"]["xd"] ==\
                 all_params["static"]["problem"]["dims"][1] ==\
                 all_params["static"]["decomposition"]["xd"])

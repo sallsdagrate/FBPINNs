@@ -59,7 +59,6 @@ class ChebyshevAdaptiveKAN(Network):
         input_dim = coeffs.shape[0]
         degree = coeffs.shape[-1] - 1
 
-        # x = jnp.tanh(x)
         batch_size = x.shape[0]
 
         cheb = jnp.ones((batch_size, input_dim, degree + 1))
@@ -141,6 +140,42 @@ class LegendreKAN(Network):
             cheb = cheb.at[:, :, 1].set(x)
         for d in range(2, degree + 1):
             cheb = cheb.at[:, :, d].set( ((2 * (d-1) + 1) / (d)) * x * cheb[:, :, d - 1] - ((d-1) / (d)) * cheb[:, :, d - 2])
+
+        y = jnp.einsum("bid,iod->bo", cheb, coeffs)
+        y = y if len(x.shape) > 1 else y[0]
+        return y
+
+class LegendreAdaptiveKAN(Network):
+
+    @staticmethod
+    def init_params(key, input_dim, output_dim, degree):
+        mean = 0
+        std = 1/(input_dim * (degree + 1))
+        coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree+1))
+        a = jnp.ones((degree+1))
+        trainable_params = {"coeffs": coeffs, "a": a}
+        return {}, trainable_params
+
+    @staticmethod
+    def network_fn(all_params, x):
+        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+        a = all_params["trainable"]["network"]["subdomain"]["a"]
+        return LegendreAdaptiveKAN.forward(coeffs, a, x)
+
+    @staticmethod
+    def forward(coeffs, a, x):
+        input_dim = coeffs.shape[0]
+        degree = coeffs.shape[-1] - 1
+
+        batch_size = x.shape[0]
+
+        cheb = jnp.ones((batch_size, input_dim, degree + 1))
+        if degree >= 1:
+            xa = jnp.tanh(x/a[0])
+            cheb = cheb.at[:, :, 1].set(xa)
+        for d in range(2, degree + 1):
+            xa = jnp.tanh(x/a[d])
+            cheb = cheb.at[:, :, d].set( ((2 * (d-1) + 1) / (d)) * xa * cheb[:, :, d - 1] - ((d-1) / (d)) * cheb[:, :, d - 2])
 
         y = jnp.einsum("bid,iod->bo", cheb, coeffs)
         y = y if len(x.shape) > 1 else y[0]
