@@ -8,33 +8,37 @@ import json
 
 
 class Benchmarker:
-    def __init__(self, problems, configs, models, trainer):
+    def __init__(self, labels, problems, configs, models, trainer, dims):
         assert len(problems) == len(configs), "Number of problems and configs must match"
         
+        self.labels = labels
         self.problems = problems
         self.configs = configs
         self.trainer = trainer
+        self.dims = dims
         self.models = models
         self.results = []
 
     def run(self):
         # Loop through all problems, configs and models
         self.results = []
-        for problem, config in zip(self.problems, self.configs):
-            result = self.run_problem(problem, config)
+        for label, problem, config, dims in zip(self.labels, self.problems, self.configs, self.dims):
+            result = self.run_problem(label, problem, config, dims)
             self.results.append(result)
         return self.results
 
     # runs problem with one config for all models
-    def run_problem(self, problem, config):
-        _, problem_class, problem_kwargs = problem
+    def run_problem(self, label, problem, config, dims):
+        problem_class, problem_kwargs = problem
         config.problem = problem_class
         config.problem_init_kwargs = problem_kwargs
+        indim, outdim = dims
+        constructed_models = [model(indim, outdim) for model in self.models]
 
-        return [self.run_problem_with_model(problem, config, model) for model in self.models]
+        return [self.run_problem_with_model(label, problem, config, model) for model in constructed_models]
 
     # runs problem with one config for one model
-    def run_problem_with_model(self, problem, config, model):
+    def run_problem_with_model(self, label, problem, config, model):
         assert len(self.models) > 0, "No models to run"
 
         # get insert model into the config
@@ -53,24 +57,24 @@ class Benchmarker:
         with open("results/saved_arrays/test_meta.json", "w") as f:
             json.dump(metrics, f, indent=4)
 
-        self.cleanup_run(problem, config, model, result, metrics)
+        self.cleanup_run(label, model[0])
         
-        return problem, config, model, result, metrics
+        return label, problem, config, model, result, metrics
     
-    def cleanup_run(self, problem, config, model, result, metrics):
-        problem_name = problem[0]
-        model_name = model[0]
+    def cleanup_run(self, problem_name, model_name):
         subprocess.run(["./benchmarks/benchmark_collect.sh", problem_name, model_name])
 
 
     
 if __name__ == "__main__":
     # Example usage
+    labels = ["HarmonicOscillator1D_LowFreq"]
     problems = [HarmonicOscillator1D_LowFreq]
     configs = [Rectangle_1D_0_1_Decomposed]
     models = [FCN_8]
     trainer = FBPINNTrainer
+    dummy_dims = [(1, 1)]
 
-    benchmarker = Benchmarker(problems, configs, models, trainer)
+    benchmarker = Benchmarker(labels, problems, configs, models, trainer, dummy_dims)
     results = benchmarker.run()
     # print(results)
