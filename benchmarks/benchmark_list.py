@@ -4,7 +4,7 @@ from config.domains_config import Rectangle_1D
 
 
 benchmarks = {
-    "HarmonicOscillator1D_LowFreq": {
+    "HarmonicOscillator1D_LowFreq_wwew": {
         "problem": HarmonicOscillator1D_LowFreq,
         "domain": Rectangle_1D(0, 1),
         "decomposition": Rectangle_1D_Decomposition(0, 1),
