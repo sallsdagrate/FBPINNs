@@ -1,80 +1,81 @@
 import numpy as np
-from fbpinns.trainers import FBPINNTrainer
-from config.constant_config import Rectangle_1D_0_1_Decomposed
-from config.problem_config import HarmonicOscillator1D_LowFreq
-from config.model_config import FCN_8
+from config.config_builder import ConfigBuilder
 import subprocess
 import json
 
 
 class Benchmarker:
-    def __init__(self, labels, problems, configs, models, trainer, dims):
-        assert len(problems) == len(configs), "Number of problems and configs must match"
-        
-        self.labels = labels
-        self.problems = problems
-        self.configs = configs
-        self.trainer = trainer
-        self.dims = dims
+    def __init__(self, benchmarks, models, trainer):
+        self.benchmarks = benchmarks
         self.models = models
+        self.trainer = trainer
         self.results = []
 
     def run(self):
-        # Loop through all problems, configs and models
+        # empty list to store results
         self.results = []
-        for label, problem, config, dims in zip(self.labels, self.problems, self.configs, self.dims):
-            result = self.run_problem(label, problem, config, dims)
+
+        # Loop through all problems, configs and models
+        for label, config_args in self.benchmarks.items():
+            result = self.run_problem(label, config_args)
             self.results.append(result)
         return self.results
 
     # runs problem with one config for all models
-    def run_problem(self, label, problem, config, dims):
-        problem_class, problem_kwargs = problem
-        config.problem = problem_class
-        config.problem_init_kwargs = problem_kwargs
-        indim, outdim = dims
-        constructed_models = [model(indim, outdim) for model in self.models]
-
-        return [self.run_problem_with_model(label, problem, config, model) for model in constructed_models]
-
-    # runs problem with one config for one model
-    def run_problem_with_model(self, label, problem, config, model):
+    def run_problem(self, label, config_args):
         assert len(self.models) > 0, "No models to run"
 
-        # get insert model into the config
-        _, model_class, model_kwargs = model
-        config.network = model_class
-        config.network_init_kwargs = model_kwargs
+        # initialise models for the problem with the given dimensions
+        indim, outdim = config_args['dims']
+        constructed_models = [model(indim, outdim) for model in self.models]
+
+        return [self.run_problem_with_model(label, config_args, model) for model in constructed_models]
+
+    # runs problem with one config for one model
+    def run_problem_with_model(self, label, config_args, model):
+        model_name, model, model_args = model
+        problem, problem_args, problem_hyperparams = config_args['problem']
+        domain, domain_args = config_args['domain']
+        decomposition, decomposition_args = config_args['decomposition']
+
+        # build configuration for specified problem
+        config = ConfigBuilder()\
+            .with_problem(problem, problem_args, problem_hyperparams)\
+            .with_domain(domain, domain_args)\
+            .with_decomposition(decomposition, decomposition_args)\
+            .with_network(model, model_args)\
+            .build_FBPINN_config()
 
         # run the trainer
         run = self.trainer(config)
         result, metrics = run.train()
         
-        # save the result
+        # save the results
         np.savez("results/saved_arrays/test_mse.npz", mse=metrics['mse'])
+        # delete mse from metrics after saving so that other metrics can be saved in json
         del metrics['mse']
-
         with open("results/saved_arrays/test_meta.json", "w") as f:
             json.dump(metrics, f, indent=4)
 
-        self.cleanup_run(label, model[0])
+        # run cleanup script to move results into self-contained folder
+        self.cleanup_run(label, model_name)
         
-        return label, problem, config, model, result, metrics
+        return label, config, model, result, metrics
     
     def cleanup_run(self, problem_name, model_name):
         subprocess.run(["./benchmarks/benchmark_collect.sh", problem_name, model_name])
 
 
     
-if __name__ == "__main__":
-    # Example usage
-    labels = ["HarmonicOscillator1D_LowFreq"]
-    problems = [HarmonicOscillator1D_LowFreq]
-    configs = [Rectangle_1D_0_1_Decomposed]
-    models = [FCN_8]
-    trainer = FBPINNTrainer
-    dummy_dims = [(1, 1)]
+# if __name__ == "__main__":
+#     # Example usage
+#     labels = ["HarmonicOscillator1D_LowFreq"]
+#     problems = [HarmonicOscillator1D_LowFreq]
+#     configs = [Rectangle_1D_0_1_Decomposed]
+#     models = [FCN_Generator(8)]
+#     trainer = FBPINNTrainer
+#     dummy_dims = [(1, 1)]
 
-    benchmarker = Benchmarker(labels, problems, configs, models, trainer, dummy_dims)
-    results = benchmarker.run()
-    # print(results)
+#     benchmarker = Benchmarker(labels, problems, configs, models, trainer, dummy_dims)
+#     results = benchmarker.run()
+#     # print(results)

@@ -16,6 +16,7 @@ from jax import jit, vmap, value_and_grad, jvp
 from jax import random
 import optax
 import numpy as np
+import os
 
 from fbpinns.trainers_base import _Trainer
 from fbpinns import networks, plot_trainer
@@ -884,6 +885,8 @@ class FBPINNTrainer(_Trainer):
                         n_test
                         )
                     
+                    if not os.path.exists('results/saved_arrays'):
+                        os.makedirs('results/saved_arrays')
                     jnp.save(f'results/saved_arrays/test_exact_{u_out}.npy', u_exact)
                     jnp.save(f'results/saved_arrays/test_{u_out}_{i}.npy', u_test)
                     logger.info('saved arrays')
@@ -891,6 +894,8 @@ class FBPINNTrainer(_Trainer):
             else:
                 fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"], x_batch_test, u_exact, u_test, us_test, ws_test, us_raw_test, x_batch, all_params, i, active, decomposition, n_test)
                 
+                if not os.path.exists('results/saved_arrays'):
+                    os.makedirs('results/saved_arrays')
                 jnp.save(f'results/saved_arrays/test_exact.npy', u_exact)
                 jnp.save(f'results/saved_arrays/test_{i}.npy', u_test)
                 logger.info('saved arrays')

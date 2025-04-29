@@ -1,14 +1,13 @@
-from config.constant_config import Rectangle_1D_0_1_Decomposed
-from config.problem_config import HarmonicOscillator1D_LowFreq
-from config.model_config import get_all_models
-from fbpinns.trainers import FBPINNTrainer
-from benchmarks.benchmarker import Benchmarker
+from config.decompositions_config import Rectangle_1D_Decomposition
+from config.problems_config import HarmonicOscillator1D_LowFreq
+from config.domains_config import Rectangle_1D
 
 
 benchmarks = {
     "HarmonicOscillator1D_LowFreq": {
         "problem": HarmonicOscillator1D_LowFreq,
-        "config": Rectangle_1D_0_1_Decomposed,
+        "domain": Rectangle_1D(0, 1),
+        "decomposition": Rectangle_1D_Decomposition(0, 1),
         "dims": (1, 1),
     },
 }

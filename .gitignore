@@ -3,3 +3,5 @@
 .*\.pyc
 .*\.txt
 .*\.pickle
+benchmarks/runs/*
+**/__pycache__/**

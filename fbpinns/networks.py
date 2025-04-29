@@ -213,7 +213,6 @@ class FCN(Network):
         for w, b in params[:-1]:
             x = jnp.dot(w, x) + b
             x = jnp.tanh(x)
-            print(x.shape)
         w, b = params[-1]
         x = jnp.dot(w, x) + b
         return x
