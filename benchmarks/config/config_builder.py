@@ -3,7 +3,6 @@ from fbpinns.constants import Constants
 class ConfigBuilder:
     """
     Builder for creating configuration objects for PINN and FBPINN workflows.
-    Uses a fluent interface to incrementally set required components before building.
     """
 
     def __init__(self):

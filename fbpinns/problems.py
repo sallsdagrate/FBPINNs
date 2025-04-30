@@ -624,6 +624,147 @@ class HarmonicOscillator1DAttention(HarmonicOscillator1D):
         return mse, phys
 
 
+class HarmonicOscillator1D_MultiFreq(Problem):
+    """Solves the time-dependent damped harmonic oscillator using hard boundary conditions
+          d^2 u      du
+        m ----- + mu -- + ku = 4cos(w0*t) + 40cos(w1*t)
+          dt^2       dt
+
+        Boundary conditions:
+        u (0) = 0
+        u'(0) = 0
+    """
+
+    @staticmethod
+    def init_params(m=0, mu=1, k=0, w0=40, w1=40, sd=0.1):
+
+        static_params = {
+            "dims":(1,1),
+            "m":m,
+            "mu":mu,
+            "k":k,
+            "sd":sd,
+            "w0":w0,
+            "w1":w1,
+            }
+
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+
+        x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        required_ujs_phys = (
+            (0,()),
+            (0,(0,)),
+            (0,(0,0))
+        )
+        return [[x_batch_phys, required_ujs_phys],]
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, u):
+
+        sd = all_params["static"]["problem"]["sd"]
+        x, tanh = x_batch[:,0:1], jnp.tanh
+
+        u = (tanh(x/sd)**2) * u
+        return u
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+
+        m, mu, k = all_params["static"]["problem"]["m"], all_params["static"]["problem"]["mu"], all_params["static"]["problem"]["k"]
+        w0, w1 = all_params["static"]["problem"]["w0"], all_params["static"]["problem"]["w1"]
+        x_batch, u, ut, utt = constraints[0]
+        t = x_batch[:,0:1]
+
+        phys = m*utt + mu*ut + k*u - (w0*jnp.cos(w0*t) + w1*jnp.cos(w1*t))
+        loss = jnp.mean((phys)**2)
+        return loss, phys
+    
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        x, sin = x_batch[:,0:1], jnp.sin
+        w0, w1 = all_params["static"]["problem"]["w0"], all_params["static"]["problem"]["w1"]
+        u = sin(w0*x) + sin(w1*x)
+        return u
+
+
+class HeatEquation1D(Problem):
+    """
+    Solves the 1D heat equation:
+    
+        u_t = α u_xx
+
+    on the domain x ∈ [0, 1] and t ∈ [0, T],
+    with homogeneous Dirichlet boundary conditions:
+        u(0,t) = u(1,t) = 0
+    and initial condition:
+        u(x,0) = sin(πx)
+
+    The analytical solution is:
+        u(x,t) = sin(πx) * exp(-α π² t)
+    """
+
+    @staticmethod
+    def init_params(alpha=1.0, N=40000):
+        static_params = {
+            "dims": (1, 2), 
+            "alpha": alpha,
+        }
+        trainable_params = {
+            'attention': jnp.zeros((N, 1))
+            }
+        return static_params, trainable_params
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+        
+        x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        
+        required_ujs_phys = (
+            (0, (0, 0)),  # u_xx
+            (0, (1,)),    # u_t
+        )
+        
+        return [[x_batch_phys, required_ujs_phys]]
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, u):
+        """
+        Enforces the Dirichlet BCs and the initial condition.
+        Assumes x_batch has two columns: x and t.
+        Constructs the solution as:
+            u(x,t) = x*(1-x)*t * u + sin(πx)
+        so that:
+            u(x,0) = sin(πx),
+            u(0,t) = 0, and
+            u(1,t) = 0.
+        """
+        x = x_batch[:, 0:1]
+        t = x_batch[:, 1:2]
+        tanh = jax.nn.tanh
+        sd = 0.1
+        return tanh((-x)/sd)*tanh((1-x)/sd)*tanh((t)/sd) * u + jnp.sin(jnp.pi * x)
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        _, uxx, ut = constraints[0]
+        alpha = all_params["static"]["problem"]["alpha"]
+        
+        residual = ut - alpha * uxx
+
+        return jnp.mean(residual ** 2), residual
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        alpha = all_params["static"]["problem"]["alpha"]
+        x = x_batch[:, 0:1]
+        t = x_batch[:, 1:2]
+        return jnp.sin(jnp.pi * x) * jnp.exp(-alpha * (jnp.pi ** 2) * t)
+    
+
+
 if __name__ == "__main__":
 
     import matplotlib.pyplot as plt

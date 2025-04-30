@@ -1,0 +1,27 @@
+run: test
+domain: <class 'fbpinns.domains.RectangularDomainND'>
+domain_init_kwargs: {'xmin': array([0., 0.]), 'xmax': array([1., 1.])}
+problem: <class '__main__.HeatEquation1D'>
+problem_init_kwargs: {'alpha': 1.0, 'N': 10000}
+decomposition: <class 'fbpinns.decompositions.RectangularDecompositionND'>
+decomposition_init_kwargs: {'subdomain_xs': [array([0.  , 0.25, 0.5 , 0.75, 1.  ]), array([0.  , 0.25, 0.5 , 0.75, 1.  ])], 'subdomain_ws': [array([0.725, 0.725, 0.725, 0.725, 0.725]), array([0.725, 0.725, 0.725, 0.725, 0.725])], 'unnorm': (0, 1)}
+network: <class 'fbpinns.networks.ChebyshevKAN'>
+network_init_kwargs: {'input_dim': 2, 'output_dim': 1, 'degree': 9}
+n_steps: 10000
+scheduler: <class 'fbpinns.schedulers.LineSchedulerRectangularND'>
+scheduler_kwargs: {'point': [0.0], 'iaxis': 0}
+ns: ((100, 100),)
+n_test: (100, 100)
+sampler: grid
+optimiser: <function adam at 0x75696787c860>
+optimiser_kwargs: {'learning_rate': 0.001}
+seed: 0
+summary_freq: 1000
+test_freq: 1000
+model_save_freq: 10000
+show_figures: True
+save_figures: False
+clear_output: False
+attention_tracker: <class 'fbpinns.attention.RBAttention'>
+attention_tracking_kwargs: {'eta_lr': 0.01, 'gamma_decay': 0.99, 'N': 10000, 'out_dim': 1}
+hostname: gpu32.doc.ic.ac.uk

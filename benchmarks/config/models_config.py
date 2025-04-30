@@ -72,3 +72,31 @@ def get_all_models():
         LegendreAdaptiveKAN_Generator(64),
         LegendreAdaptiveKAN_Generator(128),
     ]
+
+def get_all_models_1():
+    return [
+        # FCN_Generator(8),
+        # FCN_Generator(32),
+        # FCN_Generator(128),
+        # AdaptiveFCN_Generator(8),
+        # AdaptiveFCN_Generator(32),
+        # AdaptiveFCN_Generator(128),
+        # ChebyshevKAN_Generator(8),
+        # ChebyshevKAN_Generator(16),
+        # ChebyshevKAN_Generator(32),
+        # ChebyshevKAN_Generator(64),
+        # ChebyshevKAN_Generator(128),
+        # ChebyshevAdaptiveKAN_Generator(8),
+        # ChebyshevAdaptiveKAN_Generator(16),
+        # ChebyshevAdaptiveKAN_Generator(32),
+        # ChebyshevAdaptiveKAN_Generator(64),
+        LegendreKAN_Generator(8),
+        LegendreKAN_Generator(16),
+        LegendreKAN_Generator(32),
+        LegendreKAN_Generator(64),
+        LegendreKAN_Generator(128),
+        LegendreAdaptiveKAN_Generator(8),
+        LegendreAdaptiveKAN_Generator(16),
+        LegendreAdaptiveKAN_Generator(32),
+        LegendreAdaptiveKAN_Generator(64),
+    ]

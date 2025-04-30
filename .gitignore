@@ -2,6 +2,8 @@
 .*\.local
 .*\.pyc
 .*\.txt
+.*\.npy
+.*\.npz
 .*\.pickle
 benchmarks/runs/*
 **/__pycache__/**
