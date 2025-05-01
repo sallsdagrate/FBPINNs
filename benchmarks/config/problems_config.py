@@ -1,4 +1,4 @@
-from fbpinns.problems import HarmonicOscillator1D, HarmonicOscillator1D_MultiFreq, HeatEquation1D
+from fbpinns.problems import HarmonicOscillator1D, HarmonicOscillator1D_MultiFreq, HeatEquation1D, BurgersEquation2D
 from operator import mul
 from functools import reduce
 
@@ -9,7 +9,7 @@ attention_params_1 = lambda n: dict(
         N=n
     )
 
-# Problem Configurations
+# Harmonic Oscillator
 # ------------------------------------------------------
 HarmonicOscillator1D_N = 1000
 HarmonicOscillator1D_Hyperparameters = dict(
@@ -33,7 +33,8 @@ HarmonicOscillator1D_HighFreq = (HarmonicOscillator1D_MultiFreq,
                                 HarmonicOscillator1D_Hyperparameters)
 
 
-
+# Heat Equation
+# ------------------------------------------------------
 HeatEquation1D_N = (100, 100)
 Heat_Eq_1_plus_1D_Config = dict(alpha=1.0, N=100*100)
 Heat_Eq_1D_Hyperparameters = dict(
@@ -48,3 +49,20 @@ Heat_Eq_1D_Hyperparameters = dict(
 Heat_Eq_1_plus_1D = (HeatEquation1D, 
                Heat_Eq_1_plus_1D_Config,
                Heat_Eq_1D_Hyperparameters)
+
+# Burgers Equation
+# ------------------------------------------------------
+BurgersEquation1D_N = (200, 100)
+Burgers_1_plus_1D_Config = dict()
+Burgers_1_plus_1D_Hyperparameters = dict(
+    n_steps=50000,
+    ns=(BurgersEquation1D_N,),
+    n_test=BurgersEquation1D_N,
+    attention_tracking_kwargs=attention_params_1(reduce(mul, BurgersEquation1D_N)),
+    optimiser_kwargs=dict(
+        learning_rate=0.001
+    ),
+)
+Burgers_1_plus_1D = (BurgersEquation2D, 
+               Burgers_1_plus_1D_Config,
+               Burgers_1_plus_1D_Hyperparameters)

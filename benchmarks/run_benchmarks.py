@@ -1,4 +1,4 @@
-from benchmarks.benchmark_list import benchmarks, benchmarks_2
+from benchmarks.benchmark_list import burgers
 from benchmarks.benchmarker import Benchmarker
 
 from config.models_config import get_all_models, get_all_models_1
@@ -6,7 +6,7 @@ from fbpinns.trainers import FBPINNTrainer
 
 models = get_all_models_1()
 trainer = FBPINNTrainer
-to_run = benchmarks_2
+to_run = burgers
 
 if __name__ == "__main__":
     # Create a Benchmarker instance

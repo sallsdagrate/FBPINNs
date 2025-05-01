@@ -338,7 +338,7 @@ class BurgersEquation2D(Problem):
         nu = all_params["static"]["problem"]["nu"]
         _, u, ux, ut, uxx = constraints[0]
         phys = ut + (u*ux) - (nu*uxx)
-        return jnp.mean(phys**2)
+        return jnp.mean(phys**2), phys
 
     @staticmethod
     def exact_solution(all_params, x_batch, batch_shape):
