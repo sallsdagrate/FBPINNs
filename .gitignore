@@ -5,5 +5,8 @@
 .*\.npy
 .*\.npz
 .*\.pickle
-benchmarks/runs/*
 **/__pycache__/**
+benchmarks/runs/**/*.npy
+benchmarks/runs/**/*.npz
+benchmarks/runs/**/*.png
+benchmarks/runs/**/*.json
