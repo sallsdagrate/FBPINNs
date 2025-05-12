@@ -1,4 +1,4 @@
-from fbpinns.problems import HarmonicOscillator1D, HarmonicOscillator1D_MultiFreq, HeatEquation1D, BurgersEquation2D
+from fbpinns.problems import HarmonicOscillator1D, HarmonicOscillator1D_MultiFreq, HeatEquation1D, BurgersEquation2D, Poisson2D
 from operator import mul
 from functools import reduce
 
@@ -55,7 +55,7 @@ Heat_Eq_1_plus_1D = (HeatEquation1D,
 BurgersEquation1D_N = (200, 100)
 Burgers_1_plus_1D_Config = dict()
 Burgers_1_plus_1D_Hyperparameters = dict(
-    n_steps=50000,
+    n_steps=20000,
     ns=(BurgersEquation1D_N,),
     n_test=BurgersEquation1D_N,
     attention_tracking_kwargs=attention_params_1(reduce(mul, BurgersEquation1D_N)),
@@ -66,3 +66,20 @@ Burgers_1_plus_1D_Hyperparameters = dict(
 Burgers_1_plus_1D = (BurgersEquation2D, 
                Burgers_1_plus_1D_Config,
                Burgers_1_plus_1D_Hyperparameters)
+
+# Poisson Equation
+# ------------------------------------------------------
+Poisson2D_N = (100, 100)
+Poisson_2D_Config = dict()
+Poisson_2D_Hyperparameters = dict(
+    n_steps=10000,
+    ns=(Poisson2D_N,),
+    n_test=Poisson2D_N,
+    attention_tracking_kwargs=attention_params_1(reduce(mul, Poisson2D_N)),
+    optimiser_kwargs=dict(
+        learning_rate=0.001
+    ),
+)
+Poisson_2D = (Poisson2D, 
+               Poisson_2D_Config,
+               Poisson_2D_Hyperparameters)

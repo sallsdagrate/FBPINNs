@@ -1,10 +1,10 @@
-from benchmarks.benchmark_list import burgers
+from benchmarks.benchmark_list import *
 from benchmarks.benchmarker import Benchmarker
 
-from config.models_config import get_all_models, get_all_models_1
+from config.models_config import get_all_models, get_all_models_1, get_all_models_2
 from fbpinns.trainers import FBPINNTrainer
 
-models = get_all_models_1()
+models = get_all_models_2()
 trainer = FBPINNTrainer
 to_run = burgers
 

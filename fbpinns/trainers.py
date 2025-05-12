@@ -659,6 +659,8 @@ class FBPINNTrainer(_Trainer):
         domain, problem, decomposition, attention_tracker = c.domain, c.problem, c.decomposition, c.attention_tracker
         for tag, cl, kwargs in zip(["domain", "problem", "decomposition", "attention"], [domain, problem, decomposition, attention_tracker],
                                    [c.domain_init_kwargs, c.problem_init_kwargs, c.decomposition_init_kwargs, c.attention_tracking_kwargs]):
+            if cl is None:
+                continue
             ps_ = cl.init_params(**kwargs)
             if ps_[0]: all_params["static"][tag] = ps_[0]
             if ps_[1]: all_params["trainable"][tag] = ps_[1]

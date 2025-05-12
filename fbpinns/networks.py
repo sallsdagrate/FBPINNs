@@ -74,6 +74,46 @@ class ChebyshevAdaptiveKAN(Network):
         y = y if len(x.shape) > 1 else y[0]
         return y
     
+class StackedChebyshevKAN(Network):
+    """Two ChebyshevKAN blocks in series"""
+
+    @staticmethod
+    def init_params(key, input_dim, hidden_dim, output_dim, degree, kind=2):
+        # split key for two blocks and skip
+        k1, k2, k3 = random.split(key, 3)
+        # block 1: input_dim -> hidden_dim
+        static1, params1 = ChebyshevKAN.init_params(k1, input_dim, hidden_dim, degree, kind)
+        # block 2: hidden_dim -> output_dim
+        static2, params2 = ChebyshevKAN.init_params(k2, hidden_dim, output_dim, degree, kind)
+        # linear skip: input_dim -> output_dim
+        w_skip = random.normal(k3, (input_dim, output_dim)) * jnp.sqrt(2 / input_dim)
+        b_skip = jnp.zeros((output_dim,))
+
+        static = {"kind1": static1["kind"], "kind2": static2["kind"]}
+        trainable = {"block1": params1["coeffs"], "block2": params2["coeffs"], "w_skip": w_skip, "b_skip": b_skip}
+        return static, trainable
+
+    @staticmethod
+    def network_fn(all_params, x):
+        # unpack
+        kind1 = all_params["static"]["network"]["subdomain"]["kind1"]
+        kind2 = all_params["static"]["network"]["subdomain"]["kind2"]
+        coeffs1 = all_params["trainable"]["network"]["subdomain"]["block1"]
+        coeffs2 = all_params["trainable"]["network"]["subdomain"]["block2"]
+        w_skip = all_params["trainable"]["network"]["subdomain"]["w_skip"]
+        b_skip = all_params["trainable"]["network"]["subdomain"]["b_skip"]
+
+        # first KAN block
+        y1 = ChebyshevKAN.forward(coeffs1, kind1, x)
+        # second KAN block
+        y2 = ChebyshevKAN.forward(coeffs2, kind2, y1)
+        # skip connection
+        # skip = x @ w_skip + b_skip
+        return y2
+        # return skip + y2
+
+
+    
 class ChebyshevKAN(Network):
     "Chebyshev polynomials"
 
@@ -180,7 +220,61 @@ class LegendreAdaptiveKAN(Network):
         y = jnp.einsum("bid,iod->bo", cheb, coeffs)
         y = y if len(x.shape) > 1 else y[0]
         return y
+    
+class HermiteKAN(Network):
+    "Hermite polynomials"
 
+    @staticmethod
+    def init_params(key, input_dim, output_dim, degree):
+        # Initialize the Hermite coefficients with mean=0, std=1/(input_dim*(degree+1))
+        # mean = 0.0
+        # std = 1.0 / (input_dim * (degree + 1))
+        # coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree + 1))
+        # 2) Xavier‐uniform for the linear term H1(x)=2x
+        #    so that the initial map is a well‐scaled Dense layer
+        coeffs = jnp.zeros((input_dim, output_dim, degree + 1))
+        fan_in, fan_out = input_dim, output_dim
+        limit = jnp.sqrt(6.0 / (fan_in + fan_out))
+        key, subkey = random.split(key)
+        linear_init = random.uniform(subkey,
+                                     (input_dim, output_dim),
+                                     minval=-limit,
+                                     maxval=limit)
+
+        coeffs = coeffs.at[:, :, 1].set(linear_init)
+        return {}, {"coeffs": coeffs}
+
+    @staticmethod
+    def network_fn(all_params, x):
+        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+        return HermiteKAN.forward(coeffs, x)
+
+    @staticmethod
+    def forward(coeffs, x):
+        input_dim = coeffs.shape[0]
+        degree = coeffs.shape[-1] - 1
+
+        x = jnp.tanh(x)
+        batch_size = x.shape[0]
+
+        # Build Hermite basis: shape [batch, input_dim, degree+1]
+        herm = jnp.ones((batch_size, input_dim, degree + 1))
+        print(herm.shape)
+        if degree >= 1:
+            # H₁(x) = 2 x
+            herm = herm.at[:, :, 1].set(2 * x)
+
+        # Recurrence: Hₙ(x) = 2 x Hₙ₋₁(x) − 2(n−1) Hₙ₋₂(x)
+        for n in range(2, degree + 1):
+            herm = herm.at[:, :, n].set(
+                2 * x * herm[:, :, n - 1] - 2 * (n - 1) * herm[:, :, n - 2]
+            )
+
+        # einsum over batch, input_dim, degree to get [batch_size, output_dim]
+        y = jnp.einsum("bid,iod->bo", herm, coeffs)
+
+        # If original x was 1D, drop batch dim
+        return y if x.ndim > 1 else y[0]
 
 class FCN(Network):
     "Fully connected network"

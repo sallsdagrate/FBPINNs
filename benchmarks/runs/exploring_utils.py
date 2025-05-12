@@ -100,7 +100,18 @@ class RunAnalyser:
             if not filter(model):
                 continue
             # Get the FLOPs from the meta data
-            flops[model] = meta['flops']
+            flops[model] = meta['flops'][0]
+
+        return flops
+    
+    def get_training_time(self, filter=lambda _: True):
+        flops = dict()
+
+        for model, meta in self.meta_data.items():
+            if not filter(model):
+                continue
+            # Get the FLOPs from the meta data
+            flops[model] = meta['training_time']
 
         return flops
 
@@ -111,7 +122,7 @@ class RunAnalyser:
             if not filter(model):
                 continue
             # Get the number of parameters from the meta data
-            num_params[model] = meta['param_count']
+            num_params[model] = meta['param_count'][0]
 
         return num_params
     
@@ -126,7 +137,33 @@ class RunAnalyser:
 
         return training_time
     
-    def plot_mse_over_params(self, filter=lambda _: True, title='MSE vs Params', xlabel='num_params', ylabel='mse loss', noshow=False, legend=True):
+    def plot_log_log(self, models, xs, ys, xlabel, ylabel, title, legend=False, noshow=False):
+        if not noshow:
+            plt.figure(figsize=(12, 8))
+        colors = plt.cm.get_cmap('tab20', len(models))  # Use a colormap for consistent colors
+
+        for i, model in enumerate(models):
+            # Scatter plot with distinct colors and larger markers
+            plt.scatter(xs[model], ys[model], label=model, s=100, alpha=0.7, color=colors(i))
+
+            # Annotate the single point
+            plt.annotate(model, (xs[model], ys[model]), fontsize=8, alpha=0.8)
+
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.xlabel(xlabel, fontsize=12)
+        plt.ylabel(ylabel, fontsize=12)
+        plt.title(title, fontsize=14)
+
+        if legend:
+            # Place legend outside the plot area with multiple columns
+            plt.legend(loc='upper right', bbox_to_anchor=(1, 1), ncol=2, fontsize=10, title="Models")
+
+        if not noshow:
+            plt.show()
+
+        
+    def plot_mse_over_params(self, filter=lambda _: True, title='MSE vs Params', xlabel='num_params', ylabel='mse loss', noshow=False, legend=False):
         if not noshow:
             plt.figure(figsize=(7, 7))
 
@@ -134,29 +171,23 @@ class RunAnalyser:
         mses = self.get_mses(filter)
 
         slice_mse = 0.1
-        start, end = self.check_start_end(0, None)
-        start = int(end * (1 - slice_mse))
+        # start, end = self.check_start_end(0, None)
+        # start = int(end * (1 - slice_mse))
 
+        models = []
+        ys = {}
         for model in self.runs:
             if not filter(model):
                 continue
-            
-            mse = np.mean(mses[model][start:end])
-            params = num_params[model]
-            plt.scatter(params, mse, label=model, cmap='viridis')
+            models.append(model)
+            end = len(mses[model])
+            start = int(end * (1 - slice_mse))
+            ys[model] = np.mean(mses[model][start:end])
 
-        plt.xscale('log')
-        plt.yscale('log')
+        self.plot_log_log(models, num_params, ys, xlabel, ylabel, title, legend, noshow)
 
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        plt.title(title)
-        if legend:
-            plt.legend()
-        if not noshow:
-            plt.show()
 
-    def plot_mse_over_flops(self, filter=lambda _: True, title='MSE vs FLOPs', xlabel='flops', ylabel='mse loss', noshow=False, legend=True):
+    def plot_mse_over_flops(self, filter=lambda _: True, title='MSE vs FLOP', xlabel='flops', ylabel='mse loss', noshow=False, legend=False):
         if not noshow:
             plt.figure(figsize=(7, 7))
 
@@ -164,48 +195,37 @@ class RunAnalyser:
         mses = self.get_mses(filter)
 
         slice_mse = 0.1
-        start, end = self.check_start_end(0, None)
-        start = int(end * (1 - slice_mse))
+        # start, end = self.check_start_end(0, None)
+        # start = int(end * (1 - slice_mse))
 
+        models = []
+        ys = {}
         for model in self.runs:
             if not filter(model):
                 continue
-            
-            plt.scatter(flops[model], np.mean(mses[model][start:end]), label=model)
+            models.append(model)
+            end = len(mses[model])
+            start = int(end * (1 - slice_mse))
+            ys[model] = np.mean(mses[model][start:end])
 
-        plt.xscale('log')
-        plt.yscale('log')
+        self.plot_log_log(models, flops, ys, xlabel, ylabel, title, legend, noshow)
 
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        plt.title(title)
-        if legend:
-            plt.legend()
-        if not noshow:
-            plt.show()
     
-    def plot_flops_over_params(self, filter=lambda _: True, title='FLOPs vs Params', xlabel='num_params', ylabel='flops', noshow=False):
+    def plot_flops_over_params(self, filter=lambda _: True, title='FLOP vs Params', xlabel='num_params', ylabel='flops', noshow=False):
         if not noshow:
             plt.figure(figsize=(10, 5))
 
         flops = self.get_flops(filter)
         num_params = self.get_num_params(filter)
 
+        models = []
         for model in self.runs:
             if not filter(model):
                 continue
-            
-            plt.scatter(num_params[model], flops[model], label=model)
+            models.append(model)
+        
+        self.plot_log_log(models, num_params, flops, xlabel, ylabel, title, False, noshow)
 
-        plt.xscale('log')
-        plt.yscale('log')
-
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        plt.title(title)
-        plt.legend()
-        if not noshow:
-            plt.show()
 
     def plot_prediction_over_actual_1D(self, models, colors=None, epoch=10000, figsize=(10, 5), exact_color='gainsboro'):
         
@@ -232,3 +252,27 @@ class RunAnalyser:
             plt.title(f'Prediction vs Actual for {model}')
             plt.legend()
             plt.show()
+    
+    def plot_training_times(self, filter=lambda _: True, title='Training Time', xlabel='Model', ylabel='Time (s)', figsize=(10, 5)):
+        training_times = self.get_training_time(filter)
+        models = list(training_times.keys())
+        times = list(training_times.values())
+
+        def get_color(model):
+            if 'FCN' in model:
+                return 'blue'
+            elif 'CKAN' in model:
+                return 'orange'
+            elif 'LKAN' in model:
+                return 'green'
+            else:
+                return 'gray'
+
+        plt.figure(figsize=figsize)
+        plt.bar(models, times, color=[get_color(model) for model in models], alpha=0.7)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title(title)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()

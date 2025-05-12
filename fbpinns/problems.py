@@ -762,8 +762,70 @@ class HeatEquation1D(Problem):
         x = x_batch[:, 0:1]
         t = x_batch[:, 1:2]
         return jnp.sin(jnp.pi * x) * jnp.exp(-alpha * (jnp.pi ** 2) * t)
-    
 
+
+class Poisson2D(Problem):
+    """
+    Solves the 2D Poisson equation
+        - u_xx - u_yy = f(x,y)
+    on the domain [0,1] with Dirichlet boundary conditions u = 0 on ∂Ω.
+
+    We choose f(x,y) such that the exact solution is:
+        u(x,y) = sin(πx)sin(πy)
+    which implies f(x,y) = 2π²sin(πx)sin(πy).
+    """
+
+    @staticmethod
+    def init_params(f_coeff=2 * jnp.pi ** 2, sd=0.1, N=10000):
+        # 'dims': (ud, xd) => u is scalar (ud=1) and x is 2D (xd=2)
+        static_params = {
+            "dims": (1, 2),
+            "f_coeff": f_coeff,  # coefficient in the forcing function f(x,y)
+            "sd": sd,
+            'statictest': 1
+        }
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+        # --- Physics loss: sample interior points ---
+        # x_batch_phys: an array of shape (n_phys, 2)
+        x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        required_ujs_phys = (
+            (0, (0, 0)), # u_xx
+            (0, (1, 1)), # u_yy
+        )
+
+        return [[x_batch_phys, required_ujs_phys],]
+    
+    @staticmethod
+    def constraining_fn(all_params, x_batch, u):
+        sd = all_params["static"]["problem"]["sd"]
+        x, y, tanh = x_batch[:,0:1], x_batch[:,1:2], jax.nn.tanh
+        u = tanh((x)/sd) * tanh((1-x)/sd) * tanh((y)/sd) * tanh((1-y)/sd) * u
+        return u
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        # --- Physics loss ---
+        # For the physics group, the constraints have been replaced with the evaluated quantities:
+        x_phys, u_xx, u_yy = constraints[0]
+        x, y = x_phys[:, 0:1], x_phys[:,1:2]
+
+        f_coeff = all_params["static"]["problem"]["f_coeff"]
+        f_val = f_coeff * jnp.sin(jnp.pi* x) * jnp.sin(jnp.pi* y)
+
+        phys_residual = u_xx + u_yy + f_val
+
+        return jnp.mean(phys_residual**2), phys_residual
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        # The exact solution is u(x,y) = sin(πx) sin(πy)
+        x, y = x_batch[:, 0:1], x_batch[:,1:2]
+        u = jnp.sin(jnp.pi* x) * jnp.sin(jnp.pi* y)
+        return u
+    
 
 if __name__ == "__main__":
 
