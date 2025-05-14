@@ -1,4 +1,14 @@
-from fbpinns.problems import HarmonicOscillator1D, HarmonicOscillator1D_MultiFreq, HeatEquation1D, BurgersEquation2D, Poisson2D
+from fbpinns.problems import (
+    HarmonicOscillator1D, 
+    HarmonicOscillator1D_MultiFreq, 
+    HeatEquation1D, 
+    BurgersEquation2D, 
+    Poisson2D,
+    Schrodinger1D_Stationary,
+    Schrodinger1D_Non_Stationary,
+    WaveEquation2D,
+    KovasznayFlow
+    )
 from operator import mul
 from functools import reduce
 
@@ -83,3 +93,66 @@ Poisson_2D_Hyperparameters = dict(
 Poisson_2D = (Poisson2D, 
                Poisson_2D_Config,
                Poisson_2D_Hyperparameters)
+
+
+# Schrodinger Equation 1D Time dependent
+# ------------------------------------------------------
+Schrodinger_N = (200,50)
+Schrodinger_Config = dict()
+Schrodinger_Hyperparameters = dict(
+    n_steps=20000,
+    ns=(Schrodinger_N,),
+    n_test=Schrodinger_N,
+    attention_tracking_kwargs=attention_params_1(reduce(mul, Schrodinger_N)),
+    optimiser_kwargs=dict(
+        learning_rate=0.001
+    ),
+)
+Schrodinger1D_Stationary = (
+    Schrodinger1D_Stationary,
+    Schrodinger_Config,
+    Schrodinger_Hyperparameters
+)
+Schrodinger1D_NonStationary = (
+    Schrodinger1D_Non_Stationary,
+    Schrodinger_Config,
+    Schrodinger_Hyperparameters
+)
+
+# Wave eq 1+1D
+# ------------------------------------------------------
+Wave_N = (200,200)
+Wave_Config = dict()
+Wave_Hyperparameters = dict(
+    n_steps=40000,
+    ns=(Wave_N,),
+    n_test=Wave_N,
+    attention_tracking_kwargs=attention_params_1(reduce(mul, Wave_N)),
+    optimiser_kwargs=dict(
+        learning_rate=0.001
+    ),
+)
+Wave_1_plus_1D = {
+    WaveEquation2D,
+    Wave_Config,
+    Wave_Hyperparameters
+}
+
+# Kovasznay Flow
+# ------------------------------------------------------
+Kovasznay_N = (200,200)
+Kovasznay_Config = dict()
+Kovasznay_Hyperparameters = dict(
+    n_steps=10000,
+    ns=(Kovasznay_N,),
+    n_test=Kovasznay_N,
+    attention_tracking_kwargs=attention_params_1(reduce(mul, Kovasznay_N)),
+    optimiser_kwargs=dict(
+        learning_rate=0.0001
+    ),
+)
+Kovasznay_Flow = {
+    KovasznayFlow,
+    Kovasznay_N,
+    Kovasznay_Config
+}

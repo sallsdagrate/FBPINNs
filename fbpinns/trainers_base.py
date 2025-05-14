@@ -58,7 +58,6 @@ class _Trainer:
                 f.savefig(self.c.summary_out_dir+f"{name}_{i:08d}.png",
                           bbox_inches='tight', pad_inches=0.1, dpi=100, facecolor="white")
             self.writer.add_figure(name, f, i, close=False)
-        print(self.c.show_figures)
         if self.c.show_figures: plt.show()
         else: plt.close("all")
 

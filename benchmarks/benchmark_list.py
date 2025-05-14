@@ -1,6 +1,17 @@
 from config.decompositions_config import Rectangle_1D_Decomposition, Rectangle_2D_Decomposition
-from config.problems_config import HarmonicOscillator1D_LowFreq, HarmonicOscillator1D_HighFreq, Heat_Eq_1_plus_1D, Burgers_1_plus_1D, Poisson_2D
+from config.problems_config import (
+    HarmonicOscillator1D_LowFreq,
+    HarmonicOscillator1D_HighFreq,
+    Heat_Eq_1_plus_1D,
+    Burgers_1_plus_1D,
+    Poisson_2D,
+    Schrodinger1D_Stationary,
+    Schrodinger1D_NonStationary,
+    Wave_1_plus_1D,
+    Kovasznay_Flow
+    )
 from config.domains_config import Rectangle_1D, Rectangle_2D
+import jax.numpy as jnp
 
 
 low_freq = {
@@ -46,4 +57,40 @@ poisson_2d = {
         "decomposition": Rectangle_2D_Decomposition(0, 1, 0, 1, n1=5, n2=5),
         "dims": (2, 1),
     },
+}
+
+schrodinger_stationary = {
+    "Schrodinger1D_Stationary": {
+        "problem": Schrodinger1D_Stationary,
+        "domain": Rectangle_2D(-5., 5., 0., jnp.pi),
+        "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi, n1=20, n2=5),
+        "dims": (2, 2),
+    },
+}
+
+schrodinger_non_stationary = {
+    "Schrodinger1D_Stationary": {
+        "problem": Schrodinger1D_NonStationary,
+        "domain": Rectangle_2D(-5., 5., 0., jnp.pi/2),
+        "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi/2, n1=20, n2=5),
+        "dims": (2, 2),
+    },
+}
+
+wave = {
+    "Wave": {
+        "problem": Wave_1_plus_1D,
+        "domain": Rectangle_2D(0., 1., 0., 1.),
+        "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+        "dims": (2, 2)
+    }
+}
+
+kovasznay = {
+    "Kovasznay": {
+        "Kovasznay_Flow": Kovasznay_Flow,
+        "domain": Rectangle_2D(0., 1., 0., 1.),
+        "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+        "dims": (2, 3)
+    }
 }

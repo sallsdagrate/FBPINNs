@@ -825,7 +825,401 @@ class Poisson2D(Problem):
         x, y = x_batch[:, 0:1], x_batch[:,1:2]
         u = jnp.sin(jnp.pi* x) * jnp.sin(jnp.pi* y)
         return u
+
+
+class Schrodinger1D_Stationary(Problem):
     
+    @staticmethod
+    def init_params(omega=1.0, L=5.0, sd=0.1):
+        static_params = {
+            "dims": (2, 2),
+            "omega": omega,
+            "L": L,
+            "sd": sd
+        }
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+        x_batch = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        
+        required_diffs = (
+            (0, ()),     # u
+            (0, (0, 0)), # u_xx
+            (1, (1,)),   # v_t
+            (1, ()),     # v
+            (1, (0, 0)), # v_xx
+            (0, (1,)),   # u_t
+        )
+        return [[x_batch, required_diffs],]
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, net_out):
+        x = x_batch[:, 0:1]
+        t = x_batch[:, 1:2]
+        omega = all_params["static"]["problem"]["omega"]
+        L = all_params["static"]["problem"]["L"]
+        sd = all_params["static"]["problem"]["sd"]
+        tanh = jax.nn.tanh
+        
+        # Constraining function
+        c = tanh((L+x)/sd) * tanh((L-x)/sd)
+        
+        # Define the initial condition (ground state of the harmonic oscillator)
+        psi0 = (omega / jnp.pi)**0.25 * jnp.exp(-omega * x**2 / 2.0)
+        
+        # Split the raw network output into its two components.
+        u = net_out[:, 0:1]
+        v = net_out[:, 1:2]
+        
+        # Reparameterize to enforce the conditions.
+        u = c * t * u + psi0
+        v = c * t * v
+        # Concatenate u and v to form the full two-component output.
+        return jnp.concatenate([u, v], axis=1)
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        """
+        Computes the physics residual for both equations:
+        
+        Equation (1): -v_t + ½ u_{xx} - ½ ω² x² u = 0.
+        Equation (2):  u_t + ½ v_{xx} - ½ ω² x² v = 0.
+        
+        The loss is defined as the sum of the mean squared errors of the residuals for
+        both equations.
+        """
+        omega = all_params["static"]["problem"]["omega"]
+        x_batch, u, uxx, vt, v, vxx, ut = constraints[0]
+        
+        x = x_batch[:, 0:1]
+        
+        res1 = -vt + 0.5 * uxx - 0.5 * omega**2 * (x**2) * u
+        res2 = ut + 0.5 * vxx - 0.5 * omega**2 * (x**2) * v
+        
+        loss1 = jnp.mean(res1**2)
+        loss2 = jnp.mean(res2**2)
+        return loss1 + loss2, res1 + res2
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        """
+        Returns the exact ground-state solution for the harmonic oscillator.
+        
+        The analytical solution (up to a global phase) is given by:
+            u(x,t) = ψ₀(x) cos(ω t/2),
+            v(x,t) = -ψ₀(x) sin(ω t/2),
+        where ψ₀(x) = (ω/π)^(¼) exp(-ω x²/2).
+        """
+        omega = all_params["static"]["problem"]["omega"]
+        x = x_batch[:, 0:1]
+        t = x_batch[:, 1:2]
+        psi0 = (omega / jnp.pi)**0.25 * jnp.exp(-omega * x**2 / 2.0)
+        u = psi0 * jnp.cos(omega * t / 2.0)
+        v = -psi0 * jnp.sin(omega * t / 2.0)
+        return jnp.concatenate([u, v], axis=1)
+
+
+class Schrodinger1D_Non_Stationary(Schrodinger1D_Stationary):
+    
+    # @staticmethod
+    # def init_params(omega=1.0, L=5.0, sd=0.1):
+    #     static_params = {
+    #         "dims": (2, 2),
+    #         "omega": omega,
+    #         "L": L,
+    #         "sd": sd
+    #     }
+    #     return static_params, {}
+
+    # @staticmethod
+    # def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+    #     x_batch = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        
+    #     required_diffs = (
+    #         (0, ()),     # u
+    #         (0, (0, 0)), # u_xx
+    #         (1, (1,)),   # v_t
+    #         (1, ()),     # v
+    #         (1, (0, 0)), # v_xx
+    #         (0, (1,)),   # u_t
+    #     )
+    #     return [[x_batch, required_diffs],]
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, net_out):
+        """
+        Enforces both the initial condition and the boundary conditions.
+        """
+
+        x = x_batch[:, 0:1]
+        t = x_batch[:, 1:2]
+        omega = all_params["static"]["problem"]["omega"]
+        L = all_params["static"]["problem"]["L"]
+        sd = all_params["static"]["problem"]["sd"]
+        tanh = jax.nn.tanh
+        
+        # Constraining function
+        c = tanh((L+x)/sd) * tanh((L-x)/sd)
+        
+        # Define the initial condition (ground state of the harmonic oscillator)
+        psi0 = 2.0/jnp.cosh(x)
+        
+        # Split the raw network output into its two components.
+        u = net_out[:, 0:1]
+        v = net_out[:, 1:2]
+        
+        # Reparameterize to enforce the conditions.
+        u = c * t * u + psi0
+        v = c * t * v
+        # Concatenate u and v to form the full two-component output.
+        return jnp.concatenate([u, v], axis=1)
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        omega = all_params["static"]["problem"]["omega"]
+        x_batch, u, uxx, vt, v, vxx, ut = constraints[0]
+        
+        x = x_batch[:, 0:1]
+        
+        res1 = -vt + 0.5 * uxx + (u**2 + v**2) * u
+        res2 = ut + 0.5 * vxx + (u**2 + v**2) * v
+        
+        loss1 = jnp.mean(res1**2)
+        loss2 = jnp.mean(res2**2)
+        return loss1 + loss2, res1+res2
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        """
+        Need to find exact solution. Returns zeros.
+        """
+        omega = all_params["static"]["problem"]["omega"]
+        x = x_batch[:, 0:1]
+        t = x_batch[:, 1:2]
+        sech = lambda z: 1.0/jnp.cosh(z)
+        u = omega * sech(omega * x) * jnp.cos( (omega**2 * t)/2.0 )
+        v = omega * sech(omega * x) * jnp.sin( (omega**2 * t)/2.0 )
+        return jnp.zeros_like(jnp.concatenate([u, v], axis=1))
+        
+
+class WaveEquation2D(Problem):
+    """Solves the time-dependent 1D viscous Burgers equation
+        d^2 u       d^2 u    
+        ----- - c^2 ----- = 0
+        d t^2       d x^2    
+
+        for (x, t) in [0, 1]^2
+
+        Boundary conditions:
+        u(0, t) = 0
+        u(1, t) = 0
+        u(x, 0) = sin(πx) + 0.5 sin(4πx)
+        u_t(x, 0) = 0
+    """
+
+    @staticmethod
+    def init_params(c=jnp.sqrt(2), sd=0.1):
+
+        static_params = {
+            "dims":(1,2),
+            "c":c,
+            "sd":sd,
+            }
+        
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+
+        # physics loss
+        x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        required_ujs_phys = (
+            (0,(0,0)),
+            (0,(1,1)),
+        )
+        return [[x_batch_phys, required_ujs_phys],]
+
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, u):
+        sd = all_params["static"]["problem"]["sd"]
+        x, t, tanh, sin, pi = x_batch[:,0:1], x_batch[:,1:2], jax.nn.tanh, jnp.sin, jnp.pi
+        u = tanh(x/sd) * tanh((1-x)/sd) * t**2 * u  + (sin(pi*x) + 0.5 * sin(4*pi*x))
+        return u
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        c = all_params["static"]["problem"]["c"]
+        _, uxx, utt = constraints[0]
+        phys = utt - c**2 * uxx
+        mse = jnp.mean(phys**2)
+        return mse, phys
+    
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape):
+
+        c = all_params["static"]["problem"]["c"]
+        x, t, sin, cos, pi = x_batch[:,0:1], x_batch[:,1:2], jnp.sin, jnp.cos, jnp.pi
+        u = sin(pi*x)*cos(c*pi*t) + 0.5 * sin(4*pi*x)*cos(4*c*pi*t)
+        return u
+
+
+class KovasznayFlow(Problem):
+    """
+    Solves the steady 2D incompressible Navier–Stokes equations (momentum + continuity)
+    via the Kovasznay flow, defined on the domain [0,1] x [0,1].
+
+    The equations are:
+        u u_x + v u_y + p_x - ν (u_{xx}+u_{yy}) = 0,
+        u v_x + v v_y + p_y - ν (v_{xx}+v_{yy}) = 0,
+        u_x + v_y = 0,
+    where ν is the kinematic viscosity.
+
+    The exact solution is given by:
+        u(x,y) = 1 - e^(λ x) cos(2π y),
+        v(x,y) = (λ/(2π)) e^(λ x) sin(2π y),
+        p(x,y) = ½ (1 - e^(2λ x)),
+    with
+        λ = Re/2 - sqrt((Re/2)^2+4π²),
+        Re = 1/ν.
+        
+    For example, for Re=40 (ν=0.025) we have λ ≈ -0.952.
+    
+    We enforce the boundary conditions by reparameterizing the solution:
+      u(x,y) = M(x,y)*N_u(x,y) + u_exact(x,y),
+      v(x,y) = M(x,y)*N_v(x,y) + v_exact(x,y),
+      p(x,y) = N_p(x,y) + p_exact(x,y),
+    where M(x,y)=x(1-x)y(1-y) vanishes on ∂([0,1]×[0,1]).
+    """
+
+    @staticmethod
+    def init_params(nu=0.025, sd=0.1):
+        # Compute Reynolds number and λ
+        Re = 1.0 / nu
+        lam = Re / 2.0 - jnp.sqrt((Re/2.0)**2 + 4 * (jnp.pi**2))
+        static_params = {
+            "dims": (3, 2),  # 3 outputs: u, v, p; 2 inputs: x, y.
+            "nu": nu,
+            "lam": lam,
+            "sd": sd,
+        }
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+        # Sample interior points from the domain [0,1] x [0,1]
+        x_batch_phys = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        # Request second derivatives for u and v, and first derivatives for p,
+        # as well as first derivatives for the divergence condition.
+        # Here we request:
+        #   (0, (0,)) for u_x and (0, (1,)) for u_y,
+        #   (0, (0,0)) for u_xx and (0, (1,1)) for u_yy,
+        #   similarly for v,
+        #   (2, (0,)) for p_x and (2, (1,)) for p_y.
+        # To also enforce continuity u_x+v_y=0, we use the already requested u_x and v_y.
+        required_diffs = (
+            (0, ()),       # u
+            (0, (0,)),     # u_x
+            (0, (1,)),     # u_y
+            (0, (0,0)),    # u_xx
+            (0, (1,1)),    # u_yy
+            (1, ()),       # v
+            (1, (0,)),     # v_x
+            (1, (1,)),     # v_y
+            (1, (0,0)),    # v_xx
+            (1, (1,1)),    # v_yy
+            (2, ()),       # p
+            (2, (0,)),     # p_x
+            (2, (1,)),     # p_y
+        )
+        return [[x_batch_phys, required_diffs]]
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, net_out):
+        """
+        Reparameterizes the network output to enforce the boundary conditions.
+        
+        Let the raw network output be:
+            N(x,y) = [N_u(x,y), N_v(x,y), N_p(x,y)].
+        Then define the full solution as:
+            u(x,y) = M(x,y)*N_u(x,y) + u_exact(x,y),
+            v(x,y) = M(x,y)*N_v(x,y) + v_exact(x,y),
+            p(x,y) = N_p(x,y) + p_exact(x,y),
+        with the multiplier M(x,y)=x(1-x)y(1-y) which vanishes on the boundary.
+        """
+        x = x_batch[:, 0:1]
+        y = x_batch[:, 1:2]
+        sd, tanh = all_params["static"]["problem"]["sd"], jax.nn.tanh
+        # M = x * (1 - x) * y * (1 - y)
+        c = tanh((x)/sd) * tanh((1-x)/sd) * tanh((y)/sd) * tanh((1-y)/sd)
+        
+        # Extract exact solution (using lam and nu from static_params)
+        lam = all_params["static"]["problem"]["lam"]
+        pi = jnp.pi
+        u_exact = 1 - jnp.exp(lam * x) * jnp.cos(2 * pi * y)
+        v_exact = (lam / (2 * pi)) * jnp.exp(lam * x) * jnp.sin(2 * pi * y)
+        p_exact = 0.5 * (1 - jnp.exp(2 * lam * x))
+        
+        # Split network outputs
+        N_u = net_out[:, 0:1]
+        N_v = net_out[:, 1:2]
+        N_p = net_out[:, 2:3]
+        
+        u = c * N_u + u_exact
+        v = c * N_v + v_exact
+        p = N_p + p_exact
+        return jnp.concatenate([u, v, p], axis=1)
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        # Retrieve the kinematic viscosity from the parameters.
+        nu = all_params["static"]["problem"]["nu"]
+        
+        # Unpack the constraints array.
+        # We assume constraints[0] contains:
+        # [x_batch, u, u_x, u_y, u_xx, u_yy, v, v_x, v_y, v_xx, v_yy, p, p_x, p_y]
+        (x_batch, u, u_x, u_y, u_xx, u_yy,
+        v, v_x, v_y, v_xx, v_yy,
+        p, p_x, p_y) = constraints[0]
+        
+        # Compute the momentum residuals.
+        # Residual for the u-momentum equation:
+        # R_u = u * u_x + v * u_y + p_x - nu*(u_xx + u_yy)
+        residual_u = u * u_x + v * u_y + p_x - nu * (u_xx + u_yy)
+        
+        # Residual for the v-momentum equation:
+        # R_v = u * v_x + v * v_y + p_y - nu*(v_xx + v_yy)
+        residual_v = u * v_x + v * v_y + p_y - nu * (v_xx + v_yy)
+        
+        # Compute the continuity residual:
+        # R_c = u_x + v_y
+        residual_c = u_x + v_y
+        
+        # Define the total loss as the sum of mean squared errors.
+        loss_u = jnp.mean(residual_u ** 2)
+        loss_v = jnp.mean(residual_v ** 2)
+        loss_c = jnp.mean(residual_c ** 2)
+        
+        return loss_u + loss_v + loss_c
+
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        """
+        Returns the exact Kovasznay flow solution:
+            u(x,y) = 1 - e^(λ x) cos(2π y),
+            v(x,y) = (λ/(2π)) e^(λ x) sin(2π y),
+            p(x,y) = ½ (1 - e^(2λ x)).
+        """
+        lam = all_params["static"]["problem"]["lam"]
+        pi = jnp.pi
+        x = x_batch[:, 0:1]
+        y = x_batch[:, 1:2]
+        u = 1 - jnp.exp(lam * x) * jnp.cos(2 * pi * y)
+        v = (lam / (2 * pi)) * jnp.exp(lam * x) * jnp.sin(2 * pi * y)
+        p = 0.5 * (1 - jnp.exp(2 * lam * x))
+        return jnp.concatenate([u, v, p], axis=1)
 
 if __name__ == "__main__":
 

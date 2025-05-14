@@ -1,12 +1,44 @@
-.*\.jax
-.*\.local
-.*\.pyc
-.*\.txt
-.*\.npy
-.*\.npz
-.*\.pickle
+#.*\.jax
+#.*\.local
+#.*\.pyc
+#.*\.txt
+#.*\.npy
+#.*\.npz
+#.*\.pickle
+#**/__pycache__/**
+#benchmarks/runs/**/*.npy
+#benchmarks/runs/**/*.npz
+#benchmarks/runs/**/*.png
+#benchmarks/runs/**/*.json
+#benchmarks/notebooks/results/
+#benchmarks/results/
+#examples/results/
+#results/
+
+# existing patterns…
+*.jax
+*.local
+*.pyc
+*.txt
+*.npy
+*.npz
+*.pickle
+
+# ignore all Python cache dirs
+__pycache__/ 
 **/__pycache__/**
+
+# your benchmark run outputs
 benchmarks/runs/**/*.npy
 benchmarks/runs/**/*.npz
 benchmarks/runs/**/*.png
 benchmarks/runs/**/*.json
+
+# ignore notebook result dumps
+benchmarks/notebooks/results/
+
+# other results folders
+benchmarks/results/
+examples/results/
+results
+
