@@ -19,7 +19,7 @@ def AdaptiveFCN_Generator(mid_dim):
 
 # CKAN
 def ChebyshevKAN_Generator(degree, kind=1):
-    return lambda indim, outdim: (f"CKAN_{degree}", ChebyshevKAN, dict(
+    return lambda indim, outdim: (f"CKAN_d{degree}_k{kind}", ChebyshevKAN, dict(
         input_dim=indim,
         output_dim=outdim,
         degree=degree,
@@ -36,7 +36,7 @@ def StackedCKAN_Generator(degree, hidden_dim, kind=1):
 
 # CKAN Adaptive
 def ChebyshevAdaptiveKAN_Generator(degree, kind=1):
-    return lambda indim, outdim: (f"CKAN_A_{degree}", ChebyshevAdaptiveKAN, dict(
+    return lambda indim, outdim: (f"CKAN_A_d{degree}_k{kind}", ChebyshevAdaptiveKAN, dict(
         input_dim=indim,
         output_dim=outdim,
         degree=degree,
@@ -44,14 +44,14 @@ def ChebyshevAdaptiveKAN_Generator(degree, kind=1):
 
 # LegendreKAN
 def LegendreKAN_Generator(degree):
-    return lambda indim, outdim: (f"LKAN_{degree}", LegendreKAN, dict(
+    return lambda indim, outdim: (f"LKAN_d{degree}", LegendreKAN, dict(
         input_dim=indim,
         output_dim=outdim,
         degree=degree))
 
 # LegendreKAN Adaptive
 def LegendreAdaptiveKAN_Generator(degree):
-    return lambda indim, outdim: (f"LKAN_A_{degree}", LegendreAdaptiveKAN, dict(
+    return lambda indim, outdim: (f"LKAN_A_d{degree}", LegendreAdaptiveKAN, dict(
         input_dim=indim,
         output_dim=outdim,
         degree=degree))
@@ -104,9 +104,9 @@ def get_all_models_1():
 
 def get_all_models_2():
     return [
-        FCN_Generator((8, 8)),
-        FCN_Generator((16, 16)),
-        FCN_Generator((32, 32)),
+        FCN_Generator([8, 8]),
+        FCN_Generator([16, 16]),
+        FCN_Generator([32, 32]),
         StackedCKAN_Generator(4, hidden_dim=1),
         StackedCKAN_Generator(4, hidden_dim=2),
         StackedCKAN_Generator(4, hidden_dim=4),

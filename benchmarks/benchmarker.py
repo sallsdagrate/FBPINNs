@@ -93,7 +93,7 @@ class Benchmarker:
                   .with_decomposition(decomposition, decomposition_args)
                   .with_network(model_cls, model_args)
                   .build_FBPINN_config())
-
+        
         # Instantiate trainer and execute training
         run = self.trainer(config)
         result, metrics = run.train()

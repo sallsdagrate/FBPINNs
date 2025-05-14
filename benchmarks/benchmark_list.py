@@ -82,7 +82,7 @@ wave = {
         "problem": Wave_1_plus_1D,
         "domain": Rectangle_2D(0., 1., 0., 1.),
         "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
-        "dims": (2, 2)
+        "dims": (2, 1)
     }
 }
 
