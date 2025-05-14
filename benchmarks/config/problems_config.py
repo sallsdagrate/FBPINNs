@@ -132,11 +132,11 @@ Wave_Hyperparameters = dict(
         learning_rate=0.001
     ),
 )
-Wave_1_plus_1D = {
+Wave_1_plus_1D = (
     WaveEquation2D,
     Wave_Config,
     Wave_Hyperparameters
-}
+)
 
 # Kovasznay Flow
 # ------------------------------------------------------
@@ -151,8 +151,8 @@ Kovasznay_Hyperparameters = dict(
         learning_rate=0.0001
     ),
 )
-Kovasznay_Flow = {
+Kovasznay_Flow = (
     KovasznayFlow,
     Kovasznay_N,
     Kovasznay_Config
-}
+)
