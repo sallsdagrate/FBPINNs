@@ -34,84 +34,58 @@ class Network:
         """Forward model, for a SINGLE point with shape (xd,)"""
         raise NotImplementedError
 
-class ChebyshevAdaptiveKAN(Network):
-    "Chebyshev polynomials"
-
-    @staticmethod
-    def init_params(key, input_dim, output_dim, degree, kind=2):
-        mean = 0
-        std = 1/(input_dim * (degree + 1))
-        coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree+1))
-        a = jnp.ones((degree+1))
-        assert kind in {1, 2}
-        trainable_params = {"coeffs": coeffs, "a": a}
-        return {"kind": kind}, trainable_params
-
-    @staticmethod
-    def network_fn(all_params, x):
-        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
-        kind = all_params["static"]["network"]["subdomain"]["kind"]
-        a = all_params["trainable"]["network"]["subdomain"]["a"]
-        return ChebyshevAdaptiveKAN.forward(coeffs, kind, a, x)
-
-    @staticmethod
-    def forward(coeffs, kind, a, x):
-        input_dim = coeffs.shape[0]
-        degree = coeffs.shape[-1] - 1
-
-        batch_size = x.shape[0]
-
-        cheb = jnp.ones((batch_size, input_dim, degree + 1))
-        if degree >= 1:
-            # initialisation based on first or second polynomial kind
-            xa = jnp.tanh(x/a[0]) # a[0] * 
-            cheb = cheb.at[:, :, 1].set(kind * xa)
-        for d in range(2, degree + 1):
-            xa = jnp.tanh(x/a[d]) # a[d] * 
-            cheb = cheb.at[:, :, d].set(2 * xa * cheb[:, :, d - 1] - cheb[:, :, d - 2])
-
-        y = jnp.einsum("bid,iod->bo", cheb, coeffs)
-        y = y if len(x.shape) > 1 else y[0]
-        return y
-    
 class StackedChebyshevKAN(Network):
-    """Two ChebyshevKAN blocks in series"""
+    """
+    Stacked Chebyshev KAN with arbitrary number of blocks.
+
+    Args:
+      dims: List of dimensions [I0, I1, ..., IB] for B blocks.
+      degrees: List of polynomial degrees [D0, D1, ..., D_{B-1}] for each block.
+      kinds: Optional int or list of ints specifying Chebyshev kind (1 or 2) per block.
+    """
 
     @staticmethod
-    def init_params(key, input_dim, hidden_dim, output_dim, degree, kind=2):
-        # split key for two blocks and skip
-        k1, k2, k3 = random.split(key, 3)
-        # block 1: input_dim -> hidden_dim
-        static1, params1 = ChebyshevKAN.init_params(k1, input_dim, hidden_dim, degree, kind)
-        # block 2: hidden_dim -> output_dim
-        static2, params2 = ChebyshevKAN.init_params(k2, hidden_dim, output_dim, degree, kind)
-        # linear skip: input_dim -> output_dim
-        w_skip = random.normal(k3, (input_dim, output_dim)) * jnp.sqrt(2 / input_dim)
-        b_skip = jnp.zeros((output_dim,))
-
-        static = {"kind1": static1["kind"], "kind2": static2["kind"]}
-        trainable = {"block1": params1["coeffs"], "block2": params2["coeffs"], "w_skip": w_skip, "b_skip": b_skip}
-        return static, trainable
+    def init_params(key, dims, degrees, kinds=2):
+        B = len(degrees)
+        if len(dims) != B + 1:
+            raise ValueError(f"len(dims) must be len(degrees)+1, got dims={len(dims)}, degrees={B}")
+        # Broadcast kinds
+        if isinstance(kinds, int):
+            kinds_list = [kinds] * B
+        else:
+            if len(kinds) != B:
+                raise ValueError(f"len(kinds) must equal len(degrees)={B}")
+            kinds_list = list(kinds)
+        # Split PRNG for each block
+        keys = random.split(key, B)
+        # Static params: store kinds for each block
+        static_params = {"kinds": tuple(kinds_list)}
+        # Trainable params: list of coeffs arrays
+        coeffs_list = []
+        for i in range(B):
+            k = keys[i]
+            in_dim = dims[i]
+            out_dim = dims[i+1]
+            deg = degrees[i]
+            kind = kinds_list[i]
+            # ChebyshevKAN returns (static, trainable)
+            block_static, block_train = ChebyshevKAN.init_params(
+                k, in_dim, out_dim, degree=deg, kind=kind
+            )
+            # block_train = {"coeffs": ...}
+            coeffs_list.append(block_train["coeffs"])
+        trainable_params = {"coeffs_list": tuple(coeffs_list)}
+        return static_params, trainable_params
 
     @staticmethod
     def network_fn(all_params, x):
-        # unpack
-        kind1 = all_params["static"]["network"]["subdomain"]["kind1"]
-        kind2 = all_params["static"]["network"]["subdomain"]["kind2"]
-        coeffs1 = all_params["trainable"]["network"]["subdomain"]["block1"]
-        coeffs2 = all_params["trainable"]["network"]["subdomain"]["block2"]
-        w_skip = all_params["trainable"]["network"]["subdomain"]["w_skip"]
-        b_skip = all_params["trainable"]["network"]["subdomain"]["b_skip"]
-
-        # first KAN block
-        y1 = ChebyshevKAN.forward(coeffs1, kind1, x)
-        # second KAN block
-        y2 = ChebyshevKAN.forward(coeffs2, kind2, y1)
-        # skip connection
-        # skip = x @ w_skip + b_skip
-        return y2
-        # return skip + y2
-
+        coeffs_list = all_params["trainable"]["network"]["subdomain"]["coeffs_list"]
+        kinds_list = all_params["static"]["network"]["subdomain"]["kinds"]
+        # Sequentially apply each Chebyshev block
+        y = x
+        for coeffs, kind in zip(coeffs_list, kinds_list):
+            y = ChebyshevKAN.forward(coeffs, kind, y)
+        return y
 
     
 class ChebyshevKAN(Network):
@@ -151,6 +125,91 @@ class ChebyshevKAN(Network):
         y = y if len(x.shape) > 1 else y[0]
         return y
     
+class ChebyshevAdaptiveKAN(Network):
+    "Chebyshev polynomials with adaptive activation functions"
+
+    @staticmethod
+    def init_params(key, input_dim, output_dim, degree, kind=2):
+        mean = 0
+        std = 1/(input_dim * (degree + 1))
+        coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree+1))
+        a = jnp.ones((degree+1))
+        assert kind in {1, 2}
+        trainable_params = {"coeffs": coeffs, "a": a}
+        return {"kind": kind}, trainable_params
+
+    @staticmethod
+    def network_fn(all_params, x):
+        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+        kind = all_params["static"]["network"]["subdomain"]["kind"]
+        a = all_params["trainable"]["network"]["subdomain"]["a"]
+        return ChebyshevAdaptiveKAN.forward(coeffs, kind, a, x)
+
+    @staticmethod
+    def forward(coeffs, kind, a, x):
+        input_dim = coeffs.shape[0]
+        degree = coeffs.shape[-1] - 1
+
+        batch_size = x.shape[0]
+
+        cheb = jnp.ones((batch_size, input_dim, degree + 1))
+        if degree >= 1:
+            # initialisation based on first or second polynomial kind
+            xa = jnp.tanh(x/a[0]) # a[0] * 
+            cheb = cheb.at[:, :, 1].set(kind * xa)
+        for d in range(2, degree + 1):
+            xa = jnp.tanh(x/a[d]) # a[d] * 
+            cheb = cheb.at[:, :, d].set(2 * xa * cheb[:, :, d - 1] - cheb[:, :, d - 2])
+
+        y = jnp.einsum("bid,iod->bo", cheb, coeffs)
+        y = y if len(x.shape) > 1 else y[0]
+        return y
+    
+
+class StackedLegendreKAN(Network):
+    """
+    Stacked Legendre KAN with arbitrary number of blocks.
+
+    Args:
+      dims: List of dimensions [I0, I1, ..., IB] for B blocks.
+      degrees: List of polynomial degrees [D0, D1, ..., D_{B-1}] for each block.
+    """
+
+    @staticmethod
+    def init_params(key, dims, degrees):
+        B = len(degrees)
+        if len(dims) != B + 1:
+            raise ValueError(f"len(dims) must be len(degrees)+1, got dims={len(dims)}, degrees={B}")
+        # Split PRNG for each block
+        keys = random.split(key, B)
+        # Static params: store kinds for each block
+        static_params = {}
+        # Trainable params: list of coeffs arrays
+        coeffs_list = []
+        for i in range(B):
+            k = keys[i]
+            in_dim = dims[i]
+            out_dim = dims[i+1]
+            deg = degrees[i]
+            # ChebyshevKAN returns (static, trainable)
+            block_static, block_train = LegendreKAN.init_params(
+                k, in_dim, out_dim, degree=deg
+            )
+            # block_train = {"coeffs": ...}
+            coeffs_list.append(block_train["coeffs"])
+        trainable_params = {"coeffs_list": tuple(coeffs_list)}
+        return static_params, trainable_params
+
+    @staticmethod
+    def network_fn(all_params, x):
+        coeffs_list = all_params["trainable"]["network"]["subdomain"]["coeffs_list"]
+        # Sequentially apply each Chebyshev block
+        y = x
+        for coeffs in coeffs_list:
+            y = LegendreKAN.forward(coeffs, y)
+        return y
+    
+
 class LegendreKAN(Network):
     "Legendre polynomials"
 

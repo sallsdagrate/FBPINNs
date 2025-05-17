@@ -124,7 +124,7 @@ Schrodinger1D_NonStationary = (
 Wave_N = (200,200)
 Wave_Config = dict()
 Wave_Hyperparameters = dict(
-    n_steps=40000,
+    n_steps=25000,
     ns=(Wave_N,),
     n_test=Wave_N,
     attention_tracking_kwargs=attention_params_1(reduce(mul, Wave_N)),
@@ -153,6 +153,6 @@ Kovasznay_Hyperparameters = dict(
 )
 Kovasznay_Flow = (
     KovasznayFlow,
-    Kovasznay_N,
-    Kovasznay_Config
+    Kovasznay_Config,
+    Kovasznay_Hyperparameters
 )

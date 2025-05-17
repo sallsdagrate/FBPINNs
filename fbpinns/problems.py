@@ -1201,7 +1201,7 @@ class KovasznayFlow(Problem):
         loss_v = jnp.mean(residual_v ** 2)
         loss_c = jnp.mean(residual_c ** 2)
         
-        return loss_u + loss_v + loss_c
+        return loss_u + loss_v + loss_c, residual_u + residual_v + residual_c
 
 
     @staticmethod
