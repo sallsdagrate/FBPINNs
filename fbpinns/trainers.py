@@ -190,7 +190,6 @@ def PINN_model(all_params, x_batch, model_fns, verbose=True):
     log_(str_tensor(x_batch))# (n, xd)
 
     # batch over parameters and points
-    jax.debug.print(str(x_batch.shape))
     u, u_raw = vmap(PINN_model_inner, in_axes=(None,0,None,None,None))(all_params, x_batch, norm_fn, network_fn, unnorm_fn)# (n, ud)
     logger.debug("u")
     logger.debug(str_tensor(u))
@@ -532,7 +531,6 @@ def _common_train_initialisation(c, key, all_params, problem, domain):
 
     # get test points - for now, just use global interior points
     x_batch_test = domain.sample_interior(all_params=all_params, key=None, sampler="grid", batch_shape=c.n_test)
-    print(f"all_params={all_params}, key={None}, sampler=grid, batch_shape={c.n_test}")
     logger.debug("x_batch_test")
     logger.debug(str_tensor(x_batch_test))
 
