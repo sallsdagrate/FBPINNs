@@ -14,9 +14,9 @@ from config.models_config import (
 
 from fbpinns.trainers import FBPINNTrainer
 #get_all_models_1() + get_all_models_2()
-models = get_models_stacked_ckan_varying_stack() + get_models_stacked_ckan_varying_hidden_dims() + get_models_stacked_lkan_varying_hidden_dims()
+models =  get_all_models_1() + get_all_models_2() + get_models_stacked_ckan_varying_stack() + get_models_stacked_ckan_varying_hidden_dims() + get_models_stacked_lkan_varying_hidden_dims()
 trainer = FBPINNTrainer
-to_run = schrodinger_non_stationary | wave | burgers
+to_run = heat
 
 if __name__ == "__main__":
     # Create a Benchmarker instance

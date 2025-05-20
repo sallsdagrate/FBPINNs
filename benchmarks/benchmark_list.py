@@ -69,7 +69,7 @@ schrodinger_stationary = {
 }
 
 schrodinger_non_stationary = {
-    "Schrodinger1D_Stationary": {
+    "Schrodinger1D_NonStationary": {
         "problem": Schrodinger1D_NonStationary,
         "domain": Rectangle_2D(-5., 5., 0., jnp.pi/2),
         "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi/2, n1=20, n2=5),

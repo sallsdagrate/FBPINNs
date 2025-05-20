@@ -10,6 +10,7 @@ This module is used by constants.py (and subsequently trainers.py)
 import jax.numpy as jnp
 from jax import random
 import jax
+from functools import partial
 
 
 class Network:
@@ -34,60 +35,7 @@ class Network:
         """Forward model, for a SINGLE point with shape (xd,)"""
         raise NotImplementedError
 
-class StackedChebyshevKAN(Network):
-    """
-    Stacked Chebyshev KAN with arbitrary number of blocks.
 
-    Args:
-      dims: List of dimensions [I0, I1, ..., IB] for B blocks.
-      degrees: List of polynomial degrees [D0, D1, ..., D_{B-1}] for each block.
-      kinds: Optional int or list of ints specifying Chebyshev kind (1 or 2) per block.
-    """
-
-    @staticmethod
-    def init_params(key, dims, degrees, kinds=2):
-        B = len(degrees)
-        if len(dims) != B + 1:
-            raise ValueError(f"len(dims) must be len(degrees)+1, got dims={len(dims)}, degrees={B}")
-        # Broadcast kinds
-        if isinstance(kinds, int):
-            kinds_list = [kinds] * B
-        else:
-            if len(kinds) != B:
-                raise ValueError(f"len(kinds) must equal len(degrees)={B}")
-            kinds_list = list(kinds)
-        # Split PRNG for each block
-        keys = random.split(key, B)
-        # Static params: store kinds for each block
-        static_params = {"kinds": tuple(kinds_list)}
-        # Trainable params: list of coeffs arrays
-        coeffs_list = []
-        for i in range(B):
-            k = keys[i]
-            in_dim = dims[i]
-            out_dim = dims[i+1]
-            deg = degrees[i]
-            kind = kinds_list[i]
-            # ChebyshevKAN returns (static, trainable)
-            block_static, block_train = ChebyshevKAN.init_params(
-                k, in_dim, out_dim, degree=deg, kind=kind
-            )
-            # block_train = {"coeffs": ...}
-            coeffs_list.append(block_train["coeffs"])
-        trainable_params = {"coeffs_list": tuple(coeffs_list)}
-        return static_params, trainable_params
-
-    @staticmethod
-    def network_fn(all_params, x):
-        coeffs_list = all_params["trainable"]["network"]["subdomain"]["coeffs_list"]
-        kinds_list = all_params["static"]["network"]["subdomain"]["kinds"]
-        # Sequentially apply each Chebyshev block
-        y = x
-        for coeffs, kind in zip(coeffs_list, kinds_list):
-            y = ChebyshevKAN.forward(coeffs, kind, y)
-        return y
-
-    
 class ChebyshevKAN(Network):
     "Chebyshev polynomials"
 
@@ -125,6 +73,102 @@ class ChebyshevKAN(Network):
         y = y if len(x.shape) > 1 else y[0]
         return y
     
+
+class StackedChebyshevKAN(Network):
+    """
+    Stacked Chebyshev KAN with arbitrary number of blocks.
+
+    Args:
+      dims: List of dimensions [I0, I1, ..., IB] for B blocks.
+      degrees: List of polynomial degrees [D0, D1, ..., D_{B-1}] for each block.
+      kinds: Optional int or list of ints specifying Chebyshev kind (1 or 2) per block.
+    """
+    @staticmethod
+    def init_params(key, dims, degrees, kinds=2):
+        B = len(degrees)
+        kinds_list = [kinds]*B if isinstance(kinds, int) else list(kinds)
+        keys = jax.random.split(key, B)
+        coeffs_list = []
+        for i, (d_in, d_out, deg, knd) in enumerate(zip(dims, dims[1:], degrees, kinds_list)):
+            static, train = ChebyshevKAN.init_params(keys[i], d_in, d_out, deg, knd)
+            coeffs_list.append(train["coeffs"])
+        return {"kinds": tuple(kinds_list)}, {"coeffs_list": tuple(coeffs_list)}
+
+    @staticmethod
+    def network_fn(all_params, x):
+        coeffs_list = all_params["trainable"]["network"]["subdomain"]["coeffs_list"]
+        kinds_list = all_params["static"]["network"]["subdomain"]["kinds"]
+        # Sequentially apply each Chebyshev block
+        y = x
+        for coeffs, kind in zip(coeffs_list, kinds_list):
+            y = ChebyshevKAN.forward(coeffs, kind, y)
+        return y
+
+
+class OptimizedChebyshevKAN(ChebyshevKAN):
+    @staticmethod
+    def init_params(key, in_dim, out_dim, degree, kind=2):
+        std = 1.0 / (in_dim * (degree + 1))
+        coeffs = std * jax.random.normal(key, (in_dim, out_dim, degree+1))
+        assert kind in (1, 2)
+        return {"kind": kind}, {"coeffs": coeffs}
+
+    @staticmethod
+    def network_fn(all_params, x):
+        # Pull static ints out at Python level
+        static_params = all_params["static"]["network"]["subdomain"]
+        kind_py   = static_params["kind"]
+
+        # Dynamic params
+        coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
+
+        # JIT only over (coeffs, x), capturing kind & degree
+        @jax.jit
+        def _apply(c, xx):
+            return OptimizedChebyshevKAN.forward(c, kind_py, xx)
+
+        return _apply(coeffs, x)
+
+    @staticmethod
+    def forward(coeffs: jnp.ndarray, kind, x: jnp.ndarray) -> jnp.ndarray:
+        was_vector = (x.ndim == 1)
+        if was_vector:
+            x = x[None, :]
+
+        z  = jnp.tanh(x)
+        U0 = jnp.ones_like(z)
+        U1 = kind * z
+        degree = coeffs.shape[-1] - 1
+        
+        def step(carry, _):
+            Um2, Um1 = carry
+            Un = 2 * z * Um1 - Um2
+            return (Um1, Un), Un
+
+        (_, _), rest = jax.lax.scan(step, (U0, U1), None, length=degree-1)
+        rest = jnp.moveaxis(rest, 0, -1)   # rest: (degree-1, batch, in_dim) → (batch, in_dim, degree-1)
+        cheb = jnp.concatenate([U0[...,None], U1[...,None], rest], axis=-1)  # → (batch, in_dim, degree+1)
+        y = jnp.tensordot(cheb, coeffs, axes=([1,2], [0,2]))  # → (batch, out_dim)
+        return y[0] if was_vector else y
+
+
+class OptimizedStackedChebyshevKAN(StackedChebyshevKAN):
+
+    @staticmethod
+    def network_fn(all_params, x):
+        kinds = all_params["static"]["network"]["subdomain"]["kinds"]
+        coeffs_list = all_params["trainable"]["network"]["subdomain"]["coeffs_list"]
+
+        @jax.jit
+        def _apply(coeffs_list_inner, x_inner):
+            y = x_inner
+            for C, knd in zip(coeffs_list_inner, kinds):
+                y = OptimizedChebyshevKAN.forward(C, knd, y)
+            return y
+
+        return _apply(coeffs_list, x)
+
+
 class ChebyshevAdaptiveKAN(Network):
     "Chebyshev polynomials with adaptive activation functions"
 
