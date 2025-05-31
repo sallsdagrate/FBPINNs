@@ -21,3 +21,11 @@ Rectangle_2D_Decomposition = lambda xmin, xmax, ymin, ymax, un=1, n1=10, n2=10, 
     )
 )
 
+Rectangle_3D_Decomposition = lambda xmin, xmax, ymin, ymax, zmin, zmax, un=1, n1=3, n2=3, n3=3, w=2.9: (
+    RectangularDecompositionND,
+    dict(
+        subdomain_xs=[np.linspace(xmin,xmax,n1), np.linspace(ymin,ymax,n2), np.linspace(zmin,zmax,n3)], 
+        subdomain_ws=get_subdomain_ws([np.linspace(xmin,xmax,n1), np.linspace(ymin,ymax,n2), np.linspace(zmin,zmax,n3)], w), 
+        unnorm=(0, un),
+    )
+)

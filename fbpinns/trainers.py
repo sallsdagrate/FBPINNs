@@ -366,11 +366,11 @@ def FBPINN_update(optimiser_fn, active_opt_states,
     active_params = optax.apply_updates(active_params, updates)
 
     # now update the RBA attentions in‐place
-    if attention_tracker:
-        selected = selected.astype(jnp.int32)
-        attention_old = active_params["attention"]["alpha"][selected]
-        attention_new = attention_tracker.step(attention_old, residuals, static_params["attention"])
-        active_params["attention"]["alpha"] = active_params["attention"]["alpha"].at[selected].set(attention_new)
+    # if attention_tracker:
+    #     selected = selected.astype(jnp.int32)
+    #     attention_old = active_params["attention"]["alpha"][selected]
+    #     attention_new = attention_tracker.step(attention_old, residuals, static_params["attention"])
+    #     active_params["attention"]["alpha"] = active_params["attention"]["alpha"].at[selected].set(attention_new)
 
     # reinsert selected after popping (jitted function must have same signature)
     active_params["problem"]["selected"] = selected.astype(jnp.float32)
@@ -869,24 +869,26 @@ class FBPINNTrainer(_Trainer):
         # create figures
         if i % (c.test_freq * 5) == 0:
             # logger.info('dims', all_params["static"]["problem"]["dims"])
-            ud = all_params["static"]["problem"]["dims"][0]
+            ud = all_params["static"]["problem"]["dims"][0]                
             if ud > 1:
                 for u_out in range(ud):
-
-                    fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"],
-                        x_batch_test, 
-                        u_exact[:, u_out], 
-                        u_test[:, u_out], 
-                        us_test[:, u_out], 
-                        ws_test, 
-                        us_raw_test[:, u_out], 
-                        x_batch, 
-                        all_params, 
-                        i, 
-                        active, 
-                        decomposition, 
-                        n_test
-                        )
+                    if ud > 3:
+                        fs = None
+                    else:
+                        fs = plot_trainer.plot("FBPINN", all_params["static"]["problem"]["dims"],
+                            x_batch_test, 
+                            u_exact[:, u_out], 
+                            u_test[:, u_out], 
+                            us_test[:, u_out], 
+                            ws_test, 
+                            us_raw_test[:, u_out], 
+                            x_batch, 
+                            all_params, 
+                            i, 
+                            active, 
+                            decomposition, 
+                            n_test
+                            )
                     
                     if not os.path.exists('results/saved_arrays'):
                         os.makedirs('results/saved_arrays')

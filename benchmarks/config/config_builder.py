@@ -1,4 +1,12 @@
 from fbpinns.constants import Constants
+from fbpinns.schedulers import LineSchedulerRectangularND
+
+scheduled = dict(
+    scheduler = LineSchedulerRectangularND,
+    scheduler_kwargs = dict(
+        point=[0.], iaxis=0,
+    )
+)
 
 class ConfigBuilder:
     """
@@ -66,6 +74,21 @@ class ConfigBuilder:
         self.config['domain'] = domain
         self.config['domain_init_kwargs'] = domain_kwargs
         self.has_domain = True
+        return self
+    
+    def with_scheduling(self, add_schedule, scheduling_kwargs=scheduled):
+        """
+        Specify scheduling parameters for the FBPINN.
+
+        Args:
+            add_schedule: whether to add scheduling (True/False)
+            scheduling_kwargs: dict of parameters for scheduling (e.g., LineSchedulerRectangularND)
+        Returns:
+            self: to allow method chaining
+        """
+        if add_schedule:
+            self.config['scheduler'] = scheduling_kwargs['scheduler']
+            self.config['scheduler_kwargs'] = scheduling_kwargs['scheduler_kwargs']
         return self
     
     def with_decomposition(self, decomposition, decomposition_kwargs):

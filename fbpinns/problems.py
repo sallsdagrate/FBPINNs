@@ -417,7 +417,7 @@ class WaveEquationConstantVelocity3D(Problem):
         c_fn = all_params["static"]["problem"]["c_fn"]
         x_batch, uxx, uyy, utt = constraints[0]
         phys = (uxx + uyy) - (1/c_fn(all_params, x_batch)**2)*utt
-        return jnp.mean(phys**2)
+        return jnp.mean(phys**2), phys
 
     @staticmethod
     def exact_solution(all_params, x_batch, batch_shape):
@@ -1220,6 +1220,152 @@ class KovasznayFlow(Problem):
         v = (lam / (2 * pi)) * jnp.exp(lam * x) * jnp.sin(2 * pi * y)
         p = 0.5 * (1 - jnp.exp(2 * lam * x))
         return jnp.concatenate([u, v, p], axis=1)
+    
+class TaylorGreen3DFlow(Problem):
+    """
+    Steady 3D incompressible Navier–Stokes on Ω = [-1,1]^3 with a manufactured
+    Taylor–Green vortex solution mapping (x,y,z) → (u,v,w,p) ∈ R^4.
+    
+    PDE system:
+        (u·∇)u + ∇p − ν Δu = f,    ∇·u = 0,
+    where u = (u,v,w), p is pressure, and ν is viscosity.
+
+    Manufactured exact solution:
+        u(x,y,z) =  sin(πx) cos(πy) cos(πz),
+        v(x,y,z) = -cos(πx) sin(πy) cos(πz),
+        w(x,y,z) =  0,
+        p(x,y,z) = ¼ [cos(2πx) + cos(2πy)] cos(2πz).
+    Forcing f is chosen so that (u,p) satisfy the PDE exactly.
+
+    Boundary conditions are enforced via
+        u = M·N_u + u_exact, etc.,
+    with M(x,y,z)=tanh((x+1)/sd)·tanh((1−x)/sd)·tanh((y+1)/sd)·tanh((1−y)/sd)
+                 ·tanh((z+1)/sd)·tanh((1−z)/sd), so M|∂Ω = 0.
+    """
+
+    @staticmethod
+    def init_params(nu: float = 0.01, sd: float = 0.1):
+        """
+        ν: kinematic viscosity
+        sd: smoothing parameter for the boundary multiplier
+        """
+        static_params = {
+            "dims": (4, 3),  # 4 outputs (u,v,w,p), 3 inputs (x,y,z)
+            "nu": nu,
+            "sd": sd,
+        }
+        return static_params, {}
+
+    @staticmethod
+    def sample_constraints(all_params, domain, key, sampler, batch_shapes):
+        # sample interior collocation points in [-1,1]^3
+        x_batch = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
+        # request derivatives for u,v,w,p
+        # outputs: 0=u, 1=v, 2=w, 3=p
+        required = []
+        for i in range(3):  # for u,v,w
+            required += [
+                (i, ()),        # function itself
+                (i, (0,)),      # ∂/∂x_i=0 for u_x, etc.
+                (i, (1,)),
+                (i, (2,)),
+                (i, (0,0)),     # ∂²/∂x², etc.
+                (i, (1,1)),
+                (i, (2,2)),
+            ]
+        # pressure: only need p, p_x, p_y, p_z
+        required += [
+            (3, ()),
+            (3, (0,)),
+            (3, (1,)),
+            (3, (2,)),
+        ]
+        return [[x_batch, tuple(required)]]
+
+    @staticmethod
+    def constraining_fn(all_params, x_batch, net_out):
+        """
+        Enforce exact boundary values via multiplier M.
+        net_out: [N_u, N_v, N_w, N_p]
+        """
+        sd = all_params["static"]["problem"]["sd"]
+        tanh = jax.nn.tanh
+        x, y, z = x_batch[:, 0:1], x_batch[:, 1:2], x_batch[:, 2:3]
+
+        # boundary multiplier M(x,y,z)
+        M = (
+            tanh((x + 1) / sd) * tanh((1 - x) / sd) *
+            tanh((y + 1) / sd) * tanh((1 - y) / sd) *
+            tanh((z + 1) / sd) * tanh((1 - z) / sd)
+        )
+
+        pi = jnp.pi
+        # exact solution
+        u_ex =  jnp.sin(pi * x) * jnp.cos(pi * y) * jnp.cos(pi * z)
+        v_ex = -jnp.cos(pi * x) * jnp.sin(pi * y) * jnp.cos(pi * z)
+        w_ex =  jnp.zeros_like(x)
+        p_ex = 0.25 * (jnp.cos(2*pi*x) + jnp.cos(2*pi*y)) * jnp.cos(2*pi*z)
+
+        N_u, N_v, N_w, N_p = (
+            net_out[:, 0:1],
+            net_out[:, 1:2],
+            net_out[:, 2:3],
+            net_out[:, 3:4],
+        )
+
+        u = M * N_u + u_ex
+        v = M * N_v + v_ex
+        w = M * N_w + w_ex
+        p =    N_p + p_ex
+
+        return jnp.concatenate([u, v, w, p], axis=1)
+
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        """
+        Compute MSE of momentum and continuity residuals.
+        """
+        nu = all_params["static"]["problem"]["nu"]
+        (x, 
+         u, u_x, u_y, u_z, u_xx, u_yy, u_zz,
+         v, v_x, v_y, v_z, v_xx, v_yy, v_zz,
+         w, w_x, w_y, w_z, w_xx, w_yy, w_zz,
+         p, p_x, p_y, p_z) = constraints[0]
+
+        # momentum residuals
+        r_u = u*u_x + v*u_y + w*u_z + p_x - nu*(u_xx + u_yy + u_zz)
+        r_v = u*v_x + v*v_y + w*v_z + p_y - nu*(v_xx + v_yy + v_zz)
+        r_w = u*w_x + v*w_y + w*w_z + p_z - nu*(w_xx + w_yy + w_zz)
+        # continuity
+        r_c = u_x + v_y + w_z
+
+        # mean-squared
+        loss = (
+            jnp.mean(r_u**2) +
+            jnp.mean(r_v**2) +
+            jnp.mean(r_w**2) +
+            jnp.mean(r_c**2)
+        )
+
+        # diagnostic residuals stacked per point
+        resid = jnp.concatenate([r_u, r_v, r_w, r_c], axis=1)
+        return loss, resid
+
+    @staticmethod
+    def exact_solution(all_params, x_batch, batch_shape=None):
+        """
+        Return the manufactured Taylor–Green vortex.
+        """
+        pi = jnp.pi
+        x, y, z = x_batch[:, 0:1], x_batch[:, 1:2], x_batch[:, 2:3]
+
+        u =  jnp.sin(pi * x) * jnp.cos(pi * y) * jnp.cos(pi * z)
+        v = -jnp.cos(pi * x) * jnp.sin(pi * y) * jnp.cos(pi * z)
+        w =  jnp.zeros_like(x)
+        p = 0.25 * (jnp.cos(2*pi*x) + jnp.cos(2*pi*y)) * jnp.cos(2*pi*z)
+
+        return jnp.concatenate([u, v, w, p], axis=1)
+
 
 if __name__ == "__main__":
 

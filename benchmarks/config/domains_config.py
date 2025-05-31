@@ -17,3 +17,11 @@ Rectangle_2D = lambda xmin, xmax, ymin, ymax: (
         xmax=np.array([xmax,ymax]),
     ),
 )
+
+Rectangle_3D = lambda xmin, xmax, ymin, ymax, zmin, zmax: (
+    RectangularDomainND,
+    dict(
+        xmin=np.array([xmin,ymin,zmin]),
+        xmax=np.array([xmax,ymax,zmax]),
+    ),
+)

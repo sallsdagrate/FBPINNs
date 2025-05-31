@@ -1,4 +1,4 @@
-from config.decompositions_config import Rectangle_1D_Decomposition, Rectangle_2D_Decomposition
+from config.decompositions_config import Rectangle_1D_Decomposition, Rectangle_2D_Decomposition, Rectangle_3D_Decomposition
 from config.problems_config import (
     HarmonicOscillator1D_LowFreq,
     HarmonicOscillator1D_HighFreq,
@@ -8,9 +8,10 @@ from config.problems_config import (
     Schrodinger1D_Stationary,
     Schrodinger1D_NonStationary,
     Wave_1_plus_1D,
-    Kovasznay_Flow
+    Kovasznay_Flow,
+    TaylorGreenVortex,
     )
-from config.domains_config import Rectangle_1D, Rectangle_2D
+from config.domains_config import Rectangle_1D, Rectangle_2D, Rectangle_3D
 import jax.numpy as jnp
 
 
@@ -92,5 +93,15 @@ kovasznay = {
         "domain": Rectangle_2D(0., 1., 0., 1.),
         "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
         "dims": (2, 3)
+    }
+}
+
+taylor_pos = (0., 1., 0., 1., 0., 1.)
+taylorgreen = {
+    "taylorgreen": {
+        "problem": TaylorGreenVortex,
+        "domain": Rectangle_3D(*taylor_pos),
+        "decomposition": Rectangle_3D_Decomposition(*taylor_pos),
+        "dims": (3, 4)
     }
 }

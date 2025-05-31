@@ -7,7 +7,8 @@ from fbpinns.problems import (
     Schrodinger1D_Stationary,
     Schrodinger1D_Non_Stationary,
     WaveEquation2D,
-    KovasznayFlow
+    KovasznayFlow,
+    TaylorGreen3DFlow
     )
 from operator import mul
 from functools import reduce
@@ -155,4 +156,25 @@ Kovasznay_Flow = (
     KovasznayFlow,
     Kovasznay_Config,
     Kovasznay_Hyperparameters
+)
+
+
+# Taylor Green Vortex
+# ------------------------------------------------------
+TaylorGreenVortex_N = (50,50,50)
+TaylorGreenVortex_Config = dict()
+TaylorGreenVortex_Hyperparameters = dict(
+    n_steps=10000,
+    ns=(TaylorGreenVortex_N,),
+    n_test=TaylorGreenVortex_N,
+    attention_tracking_kwargs=attention_params_1(reduce(mul, TaylorGreenVortex_N)),
+    optimiser_kwargs=dict(
+        learning_rate=0.001
+    ),
+    summary_freq = 100
+)
+TaylorGreenVortex = (
+    TaylorGreen3DFlow,
+    TaylorGreenVortex_Config,
+    TaylorGreenVortex_Hyperparameters
 )

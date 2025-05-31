@@ -10,7 +10,7 @@ class Benchmarker:
     trains models via a provided trainer, and collects results.
     """
 
-    def __init__(self, benchmarks, models, trainer):
+    def __init__(self, benchmarks, models, trainer, scheduled=False):
         """
         Initialize the benchmarker.
 
@@ -24,6 +24,7 @@ class Benchmarker:
         self.models = models            # store list of model constructors
         self.trainer = trainer          # trainer callable for running experiments
         self.results = []               # will hold results of benchmark runs
+        self.scheduled = scheduled     # whether to run benchmarks with scheduling
 
     def run(self):
         """
@@ -92,6 +93,7 @@ class Benchmarker:
                   .with_domain(domain, domain_args)
                   .with_decomposition(decomposition, decomposition_args)
                   .with_network(model_cls, model_args)
+                  .with_scheduling(self.scheduled)
                   .build_FBPINN_config())
         
         # Instantiate trainer and execute training
@@ -107,7 +109,7 @@ class Benchmarker:
             json.dump(metrics, f, indent=4)
 
         # Collect outputs into organized directory structure
-        self.cleanup_run(label, model_name)
+        self.cleanup_run(label+('_scheduled' if self.scheduled else ''), model_name)
 
         return (label, config, model_name, result, metrics)
 
