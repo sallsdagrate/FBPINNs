@@ -680,6 +680,7 @@ class FBPINNTrainer(_Trainer):
             'param_count': [],
             'flops': [],
             'training_time': 0,
+            'get_inputs': [],
         }
 
         # initialise subdomain network params
@@ -743,6 +744,7 @@ class FBPINNTrainer(_Trainer):
                 logger.info("p, f")
                 logger.info((p,f))
                 metrics['param_count'].append(p)
+                metrics['get_inputs'].append(i)
                 metrics['flops'].append(f)
             #     logger.info(f"curr {i}, decomp {domain_i}")
 

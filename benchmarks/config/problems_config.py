@@ -8,7 +8,8 @@ from fbpinns.problems import (
     Schrodinger1D_Non_Stationary,
     WaveEquation2D,
     KovasznayFlow,
-    TaylorGreen3DFlow
+    TaylorGreen3DFlow,
+    WaveEquationGaussianVelocity3D,
     )
 from operator import mul
 from functools import reduce
@@ -144,6 +145,7 @@ Wave_1_plus_1D = (
 Kovasznay_N = (200,200)
 Kovasznay_Config = dict()
 Kovasznay_Hyperparameters = dict(
+    # n_steps=20000,
     n_steps=10000,
     ns=(Kovasznay_N,),
     n_test=Kovasznay_N,
@@ -164,7 +166,7 @@ Kovasznay_Flow = (
 TaylorGreenVortex_N = (50,50,50)
 TaylorGreenVortex_Config = dict()
 TaylorGreenVortex_Hyperparameters = dict(
-    n_steps=10000,
+    n_steps=1000,
     ns=(TaylorGreenVortex_N,),
     n_test=TaylorGreenVortex_N,
     attention_tracking_kwargs=attention_params_1(reduce(mul, TaylorGreenVortex_N)),
@@ -177,4 +179,23 @@ TaylorGreenVortex = (
     TaylorGreen3DFlow,
     TaylorGreenVortex_Config,
     TaylorGreenVortex_Hyperparameters
+)
+
+# Wave Equation with Gaussian Velocity
+# ------------------------------------------------------
+WaveGaussianVelocity_N = (75,75,20)
+WaveGaussianVelocity_Config = dict()
+WaveGaussianVelocity_Hyperparameters = dict(
+    n_steps=25000,
+    ns=(WaveGaussianVelocity_N,),
+    n_test=WaveGaussianVelocity_N,
+    attention_tracking_kwargs=attention_params_1(reduce(mul, WaveGaussianVelocity_N)),
+    optimiser_kwargs=dict(
+        learning_rate=0.001
+    ),
+)
+WaveGaussianVelocity = (
+    WaveEquationGaussianVelocity3D,
+    WaveGaussianVelocity_Config,
+    WaveGaussianVelocity_Hyperparameters
 )

@@ -10,6 +10,7 @@ from config.problems_config import (
     Wave_1_plus_1D,
     Kovasznay_Flow,
     TaylorGreenVortex,
+    WaveGaussianVelocity
     )
 from config.domains_config import Rectangle_1D, Rectangle_2D, Rectangle_3D
 import jax.numpy as jnp
@@ -103,5 +104,15 @@ taylorgreen = {
         "domain": Rectangle_3D(*taylor_pos),
         "decomposition": Rectangle_3D_Decomposition(*taylor_pos),
         "dims": (3, 4)
+    }
+}
+
+wave_eq_gauss_pos = (0., 1., 0., 1., 0., 1.)
+wave_eq_gauss = {
+    "wave_eq_gauss": {
+        "problem": WaveGaussianVelocity,
+        "domain": Rectangle_3D(*wave_eq_gauss_pos),
+        "decomposition": Rectangle_3D_Decomposition(*wave_eq_gauss_pos),
+        "dims": (3, 1)
     }
 }

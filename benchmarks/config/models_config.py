@@ -222,14 +222,15 @@ def get_models_taylor():
         # OptimizedStackedCKAN_Generator(degrees=[5, 5], hidden_dims=[4]),
         # OptimizedStackedCKAN_Generator(degrees=[6, 6], hidden_dims=[4]),
         # OptimizedStackedCKAN_Generator(degrees=[7, 7], hidden_dims=[4]),
-        StackedCKAN_Generator(degrees=[5, 5], hidden_dims=[4]),
-        StackedCKAN_Generator(degrees=[6, 6], hidden_dims=[4]),
-        StackedCKAN_Generator(degrees=[7, 7], hidden_dims=[4]),
+        OptimizedStackedCKAN_Generator(degrees=[7, 7], hidden_dims=[6]),
+        # StackedCKAN_Generator(degrees=[5, 5], hidden_dims=[4]),
+        # StackedCKAN_Generator(degrees=[6, 6], hidden_dims=[4]),
+        # StackedCKAN_Generator(degrees=[7, 7], hidden_dims=[4]),
         # FCN_Generator([4, 4]),
         # FCN_Generator([8, 8]),
         # FCN_Generator([16, 16]),
         # FCN_Generator([32, 32]),
-    ]
+    ][::-1]
 
 def get_models_mixed_basis_kan():
     return [
@@ -245,14 +246,43 @@ def get_models_mixed_basis_kan():
 
 def get_models_scheduling():
     return [
-        OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[10]),
-        OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[4]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[16]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[14]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[12]),
+        # OptimizedStackedCKAN_Generator(degrees=[8, 8], hidden_dims=[10]),
+        # OptimizedStackedCKAN_Generator(degrees=[6, 6], hidden_dims=[10]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[10]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[8]),
         OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[6]),
-        OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[8]),
+        OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[4]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4, 4], hidden_dims=[10, 10]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4, 4, 4], hidden_dims=[10, 10, 10]),
+        FCN_Generator([8, 8]),
+        FCN_Generator([16, 16]),
+        # FCN_Generator([32, 32]),
+        # FCN_Generator([32, 32, 32]),
+        # FCN_Generator([32, 32, 32, 32]),
+        # FCN_Generator([64, 64]),
+    ]
+
+
+def get_models_gauss():
+    return [
+        FCN_Generator([4, 4]),
         FCN_Generator([8, 8]),
         FCN_Generator([16, 16]),
         FCN_Generator([32, 32]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[1]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[2]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[3]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[4]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[5]),
+        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[6]),
+        OptimizedStackedCKAN_Generator(degrees=[5, 5], hidden_dims=[4]),
+        OptimizedStackedCKAN_Generator(degrees=[6, 6], hidden_dims=[4]),
+        OptimizedStackedCKAN_Generator(degrees=[7, 7], hidden_dims=[4]),
     ]
+
 
 if __name__ == "__main__":
     m = FCN_Generator(16)(2, 1)
