@@ -707,16 +707,16 @@ class HeatEquation1D(Problem):
     """
     Solves the 1D heat equation:
     
-        u_t = α u_xx
+        u_t = alpha u_xx
 
-    on the domain x ∈ [0, 1] and t ∈ [0, T],
+    on the domain x in [0, 1] and t in [0, T],
     with homogeneous Dirichlet boundary conditions:
         u(0,t) = u(1,t) = 0
     and initial condition:
-        u(x,0) = sin(πx)
+        u(x,0) = sin(pi x)
 
     The analytical solution is:
-        u(x,t) = sin(πx) * exp(-α π² t)
+        u(x,t) = sin(pix) * exp(-alpha pi^2 t)
     """
 
     @staticmethod
@@ -748,9 +748,9 @@ class HeatEquation1D(Problem):
         Enforces the Dirichlet BCs and the initial condition.
         Assumes x_batch has two columns: x and t.
         Constructs the solution as:
-            u(x,t) = x*(1-x)*t * u + sin(πx)
+            u(x,t) = x*(1-x)*t * u + sin(pi x)
         so that:
-            u(x,0) = sin(πx),
+            u(x,0) = sin(pix),
             u(0,t) = 0, and
             u(1,t) = 0.
         """
@@ -781,11 +781,11 @@ class Poisson2D(Problem):
     """
     Solves the 2D Poisson equation
         - u_xx - u_yy = f(x,y)
-    on the domain [0,1] with Dirichlet boundary conditions u = 0 on ∂Ω.
+    on the domain [0,1] with Dirichlet boundary conditions u = 0 on ∂omega.
 
     We choose f(x,y) such that the exact solution is:
-        u(x,y) = sin(πx)sin(πy)
-    which implies f(x,y) = 2π²sin(πx)sin(πy).
+        u(x,y) = sin(pi x)sin(pi y)
+    which implies f(x,y) = 2pi ^2sin(pi x)sin(pi y).
     """
 
     @staticmethod
@@ -834,7 +834,7 @@ class Poisson2D(Problem):
 
     @staticmethod
     def exact_solution(all_params, x_batch, batch_shape=None):
-        # The exact solution is u(x,y) = sin(πx) sin(πy)
+        # The exact solution is u(x,y) = sin(pi x) sin(pi y)
         x, y = x_batch[:, 0:1], x_batch[:,1:2]
         u = jnp.sin(jnp.pi* x) * jnp.sin(jnp.pi* y)
         return u
@@ -896,8 +896,8 @@ class Schrodinger1D_Stationary(Problem):
         """
         Computes the physics residual for both equations:
         
-        Equation (1): -v_t + ½ u_{xx} - ½ ω² x² u = 0.
-        Equation (2):  u_t + ½ v_{xx} - ½ ω² x² v = 0.
+        Equation (1): -v_t + ½ u_{xx} - ½ omega^2 x^2 u = 0.
+        Equation (2):  u_t + ½ v_{xx} - ½ omega^2 x^2 v = 0.
         
         The loss is defined as the sum of the mean squared errors of the residuals for
         both equations.
@@ -920,9 +920,9 @@ class Schrodinger1D_Stationary(Problem):
         Returns the exact ground-state solution for the harmonic oscillator.
         
         The analytical solution (up to a global phase) is given by:
-            u(x,t) = ψ₀(x) cos(ω t/2),
-            v(x,t) = -ψ₀(x) sin(ω t/2),
-        where ψ₀(x) = (ω/π)^(¼) exp(-ω x²/2).
+            u(x,t) = psi 0(x) cos(omega t/2),
+            v(x,t) = -psi 0(x) sin(omega t/2),
+        where psi 0(x) = (omega/pi)^(1/4) exp(-omega x^2/2).
         """
         omega = all_params["static"]["problem"]["omega"]
         x = x_batch[:, 0:1]
@@ -1027,7 +1027,7 @@ class WaveEquation2D(Problem):
         Boundary conditions:
         u(0, t) = 0
         u(1, t) = 0
-        u(x, 0) = sin(πx) + 0.5 sin(4πx)
+        u(x, 0) = sin(pi x) + 0.5 sin(4pi x)
         u_t(x, 0) = 0
     """
 
@@ -1093,35 +1093,35 @@ class WaveEquation2DAttention(WaveEquation2D):
 
 class KovasznayFlow(Problem):
     """
-    Solves the steady 2D incompressible Navier–Stokes equations (momentum + continuity)
+    Solves the steady 2D incompressible Navier-Stokes equations (momentum + continuity)
     via the Kovasznay flow, defined on the domain [0,1] x [0,1].
 
     The equations are:
-        u u_x + v u_y + p_x - ν (u_{xx}+u_{yy}) = 0,
-        u v_x + v v_y + p_y - ν (v_{xx}+v_{yy}) = 0,
+        u u_x + v u_y + p_x - rho (u_{xx}+u_{yy}) = 0,
+        u v_x + v v_y + p_y - rho (v_{xx}+v_{yy}) = 0,
         u_x + v_y = 0,
-    where ν is the kinematic viscosity.
+    where rho is the kinematic viscosity.
 
     The exact solution is given by:
-        u(x,y) = 1 - e^(λ x) cos(2π y),
-        v(x,y) = (λ/(2π)) e^(λ x) sin(2π y),
-        p(x,y) = ½ (1 - e^(2λ x)),
+        u(x,y) = 1 - e^(lambda x) cos(2pi  y),
+        v(x,y) = (lambda/(2pi )) e^(lambda x) sin(2pi  y),
+        p(x,y) = 1/2 (1 - e^(2lambda x)),
     with
-        λ = Re/2 - sqrt((Re/2)^2+4π²),
-        Re = 1/ν.
+        lambda = Re/2 - sqrt((Re/2)^2+4pi ^2),
+        Re = 1/rho.
         
-    For example, for Re=40 (ν=0.025) we have λ ≈ -0.952.
+    For example, for Re=40 (rho=0.025) we have lambda ≈ -0.952.
     
     We enforce the boundary conditions by reparameterizing the solution:
       u(x,y) = M(x,y)*N_u(x,y) + u_exact(x,y),
       v(x,y) = M(x,y)*N_v(x,y) + v_exact(x,y),
       p(x,y) = N_p(x,y) + p_exact(x,y),
-    where M(x,y)=x(1-x)y(1-y) vanishes on ∂([0,1]×[0,1]).
+    where M(x,y)=x(1-x)y(1-y) vanishes on delta([0,1]x[0,1]).
     """
 
     @staticmethod
     def init_params(nu=0.025, sd=0.1):
-        # Compute Reynolds number and λ
+        # Compute Reynolds number and lambda
         Re = 1.0 / nu
         lam = Re / 2.0 - jnp.sqrt((Re/2.0)**2 + 4 * (jnp.pi**2))
         static_params = {
@@ -1234,9 +1234,9 @@ class KovasznayFlow(Problem):
     def exact_solution(all_params, x_batch, batch_shape=None):
         """
         Returns the exact Kovasznay flow solution:
-            u(x,y) = 1 - e^(λ x) cos(2π y),
-            v(x,y) = (λ/(2π)) e^(λ x) sin(2π y),
-            p(x,y) = ½ (1 - e^(2λ x)).
+            u(x,y) = 1 - e^(lambda x) cos(2pi  y),
+            v(x,y) = (lambda/(2pi )) e^(lambda x) sin(2pi  y),
+            p(x,y) = 1/4 (1 - e^(2lambda x)).
         """
         lam = all_params["static"]["problem"]["lam"]
         pi = jnp.pi
@@ -1249,24 +1249,24 @@ class KovasznayFlow(Problem):
     
 class TaylorGreen3DFlow(Problem):
     """
-    Steady 3D incompressible Navier–Stokes on Ω = [-1,1]^3 with a manufactured
-    Taylor–Green vortex solution mapping (x,y,z) → (u,v,w,p) ∈ R^4.
+    Steady 3D incompressible Navier-Stokes on omega = [-1,1]^3 with a manufactured
+    Taylor-Green vortex solution mapping (x,y,z) -> (u,v,w,p) ∈ R^4.
     
     PDE system:
-        (u·∇)u + ∇p − ν Δu = f,    ∇·u = 0,
-    where u = (u,v,w), p is pressure, and ν is viscosity.
+        (u·∇)u + ∇p - rho Δu = f,    ∇·u = 0,
+    where u = (u,v,w), p is pressure, and rho is viscosity.
 
     Manufactured exact solution:
-        u(x,y,z) =  sin(πx) cos(πy) cos(πz),
-        v(x,y,z) = -cos(πx) sin(πy) cos(πz),
+        u(x,y,z) =  sin(pi x) cos(pi y) cos(pi z),
+        v(x,y,z) = -cos(pi x) sin(pi y) cos(pi z),
         w(x,y,z) =  0,
-        p(x,y,z) = ¼ [cos(2πx) + cos(2πy)] cos(2πz).
+        p(x,y,z) = 1/4 [cos(2pi x) + cos(2pi y)] cos(2pi z).
     Forcing f is chosen so that (u,p) satisfy the PDE exactly.
 
     Boundary conditions are enforced via
         u = M·N_u + u_exact, etc.,
-    with M(x,y,z)=tanh((x+1)/sd)·tanh((1−x)/sd)·tanh((y+1)/sd)·tanh((1−y)/sd)
-                 ·tanh((z+1)/sd)·tanh((1−z)/sd), so M|∂Ω = 0.
+    with M(x,y,z)=tanh((x+1)/sd)tanh((1-x)/sd)tanh((y+1)/sd)tanh((1-y)/sd)
+                 tanh((z+1)/sd)tanh((1-z)/sd), so M on boundary = 0.
     """
 
     @staticmethod
@@ -1284,18 +1284,16 @@ class TaylorGreen3DFlow(Problem):
 
     @staticmethod
     def sample_constraints(all_params, domain, key, sampler, batch_shapes):
-        # sample interior collocation points in [-1,1]^3
         x_batch = domain.sample_interior(all_params, key, sampler, batch_shapes[0])
-        # request derivatives for u,v,w,p
-        # outputs: 0=u, 1=v, 2=w, 3=p
+
         required = []
-        for i in range(3):  # for u,v,w
+        for i in range(3): 
             required += [
-                (i, ()),        # function itself
-                (i, (0,)),      # ∂/∂x_i=0 for u_x, etc.
+                (i, ()), 
+                (i, (0,)),
                 (i, (1,)),
                 (i, (2,)),
-                (i, (0,0)),     # ∂²/∂x², etc.
+                (i, (0,0)),
                 (i, (1,1)),
                 (i, (2,2)),
             ]
@@ -1380,7 +1378,7 @@ class TaylorGreen3DFlow(Problem):
     @staticmethod
     def exact_solution(all_params, x_batch, batch_shape=None):
         """
-        Return the manufactured Taylor–Green vortex.
+        Return the manufactured Taylor-Green vortex.
         """
         pi = jnp.pi
         x, y, z = x_batch[:, 0:1], x_batch[:, 1:2], x_batch[:, 2:3]

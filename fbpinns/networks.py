@@ -200,13 +200,6 @@ class ChebyshevAdaptiveKAN(Network):
     
 
 class StackedLegendreKAN(Network):
-    """
-    Stacked Legendre KAN with arbitrary number of blocks.
-
-    Args:
-      dims: List of dimensions [I0, I1, ..., IB] for B blocks.
-      degrees: List of polynomial degrees [D0, D1, ..., D_{B-1}] for each block.
-    """
 
     @staticmethod
     def init_params(key, dims, degrees):
@@ -627,28 +620,11 @@ class FourierFCN(FCN):
         x = jnp.dot(w, x) + b
         return x
 
-# Spline-based KAN implementation in JAX
+# Spline-based KAN implementation in JAX (DOESN'T WORK)
 class SplineKAN(Network):
-    """Spline-based Kolmogorov-Arnold Network (KAN)."""
-
     @staticmethod
     def init_params(key, in_dim, out_dim, grid_size=5, spline_order=3,
                     scale_base=1.0, scale_spline=1.0, grid_range=[-1, 1]):
-        """Initialise class parameters.
-
-        Args:
-            key: JAX random key.
-            in_dim (int): Input dimension.
-            out_dim (int): Output dimension.
-            grid_size (int): Number of grid intervals.
-            spline_order (int): Order of the B-spline. k=3 is cubic.
-            scale_base (float): Scale for initializing the base weights.
-            scale_spline (float): Scale for initializing the spline weights.
-            grid_range (list): The range of the grid, e.g., [-1, 1].
-
-        Returns:
-            A tuple of dictionaries for static and trainable parameters.
-        """
         # --- Static Parameters ---
         # These are fixed after initialization.
         h = (grid_range[1] - grid_range[0]) / grid_size
@@ -726,10 +702,6 @@ class SplineKAN(Network):
     #     return bases
 
     def _b_splines_cubic(x, grid):
-        """
-        Cubic (order=3) B-spline basis builder, fully unrolled.
-        Returns shape (batch, in_dim, grid_size + 3).
-        """
         # ensure a batch dim, and lift features to the last axis
         x = jnp.atleast_2d(x)
         b = x[..., None]     # (batch, in_dim, 1)
@@ -763,15 +735,6 @@ class SplineKAN(Network):
 
     @staticmethod
     def network_fn(all_params, x):
-        """The forward pass of the Spline KAN layer.
-        
-        Args:
-            all_params (dict): A dictionary containing 'static' and 'trainable' parameter dicts.
-            x (jnp.array): Input data. Shape (batch, in_dim) or (in_dim,).
-            
-        Returns:
-            jnp.array: The output of the KAN layer.
-        """
         # Unpack parameters
         static_p = all_params["static"]["network"]["subdomain"]
         trainable_p = all_params["trainable"]["network"]["subdomain"]
@@ -844,20 +807,18 @@ if __name__ == "__main__":
 
 class OrthogonalPolynomialKAN(Network):
     """
-    General JIT‐compiled “Orthogonal Polynomial KAN” for any 3‐term recurrence.
+    General optimized Orthogonal Polynomial KAN for any 3‐term recurrence.
 
     Recurrence form (for n = 2..D):
-        P₀(x) = 1,
-        P₁(x) = (a₁ x + b₁)/d₁,
-        Pₙ(x) = [ (aₙ x + bₙ)·P_{n-1}(x)  –  cₙ·P_{n-2}(x ) ] / dₙ,    n ≥ 2.
+        P0(x) = 1,
+        P1(x) = (a1 x + b1)/d1,
+        Pn(x) = [ (an x + bn)P_{n-1}(x) - cn·P_{n-2}(x) ] / dn,    n >= 2.
 
     The user supplies four 1D arrays (each length D+1):
-        a = [a₀, a₁, …, a_D],
-        b = [b₀, b₁, …, b_D],
-        c = [c₀, c₁, …, c_D],
-        d = [d₀, d₁, …, d_D].
-
-    Typically a₀=0, b₀=0, c₁=0, d₀=1 so that P₀=1, P₁=(a₁x + b₁)/d₁.
+        a = [a0, a1, …, a_D],
+        b = [b0, b1, …, b_D],
+        c = [c0, c1, …, c_D],
+        d = [d0, d1, …, d_D].
     """
 
     @staticmethod
@@ -868,11 +829,6 @@ class OrthogonalPolynomialKAN(Network):
         degree: int,
         recurrence_coefs: Dict[str, jnp.ndarray]
     ) -> Tuple[Dict, Dict]:
-        """
-        - `degree` = D.  Trainable coeffs shape = (in_dim, out_dim, D+1).
-        - `recurrence_coefs` must be a dict with keys "a","b","c","d",
-          each a jnp.ndarray of shape (D+1,).
-        """
 
         std = 1.0 / (in_dim * (degree + 1))
         coeffs = std * jax.random.normal(key, (in_dim, out_dim, degree + 1))
@@ -892,13 +848,6 @@ class OrthogonalPolynomialKAN(Network):
 
     @staticmethod
     def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
-        """
-        Pull out:
-          - coeffs (trainable):   shape = (in_dim, out_dim, D+1)
-          - a, b, c, d (static):  each shape = (D+1,)
-
-        JIT‐compile a single forward over (coeffs, a, b, c, d, x).
-        """
         coeffs = all_params["trainable"]["network"]["coeffs"]
         rec   = all_params["static"]["network"]["recurrence"]
         a     = rec["a"]
@@ -918,13 +867,7 @@ class OrthogonalPolynomialKAN(Network):
     def _forward_jit(
         coeffs, a, b, c, d, x
     ) -> jnp.ndarray:
-        """
-        Build {P₀…P_D}( tanh(x) ) via a single lax.scan, then contract.
 
-        - coeffs: (in_dim, out_dim, D+1)
-        - a,b,c,d: each (D+1,)
-        - x: (batch_size, in_dim) or (in_dim,) 
-        """
         was_vector = (x.ndim == 1)
         x_batch = x if not was_vector else x[None, :]    # → (batch_size, in_dim)
         # z = jnp.tanh(x_batch)                            # (batch_size, in_dim)
@@ -973,11 +916,9 @@ class OrthogonalPolynomialKAN(Network):
 
 class StackedOrthogonalPolynomialKAN(Network):
     """
-    “Stacked” version: apply B blocks in series, each with its own 3‐term recurrence.
-
     Args:
-      dims:        [I₀, I₁, …, I_B], length = B+1
-      degrees:     [D₀, D₁, …, D_{B-1}], length = B
+      dims:        [I1, I1, ..., I_B], length = B+1
+      degrees:     [D1, D1, ..., D_{B-1}], length = B
       recurrences: List of length B, where
           recurrences[i] = {
               "a": jnp.ndarray(shape=(D_i+1,)),
@@ -996,12 +937,9 @@ class StackedOrthogonalPolynomialKAN(Network):
     ) -> Tuple[Dict, Dict]:
         """
         For each block i=0..B-1:
-          - dims[i] → dims[i+1]
+          - dims[i] -> dims[i+1]
           - degree = degrees[i]
           - recurrences[i] has arrays "a","b","c","d" of length degree+1.
-
-        Splits `key` into B sub‐keys, initializes one (in_i, out_i, degree_i+1) trainable
-        coeff tensor per block, and stores the recurrence arrays in static.
         """
         B = len(degrees)
         assert len(dims) == B + 1
@@ -1038,15 +976,6 @@ class StackedOrthogonalPolynomialKAN(Network):
 
     @staticmethod
     def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
-        """
-        JIT‐compile a single function that loops through all B blocks.  Each block i:
-          - takes yᶦ (shape=(batch_size, dims[i]))
-          - builds basis P₀…P_{D_i} at z = tanh(yᶦ)
-          - contracts with coeffs_list[i] (shape=(dims[i], dims[i+1], D_i+1))
-          - outputs yⁱ⁺¹ (shape=(batch_size, dims[i+1])).
-
-        Returns final y⁽ᴮ⁾ (shape=(batch_size, dims[B])) or vector if input was vector.
-        """
         coeffs_list = all_params["trainable"]["network"]["subdomain"]["coeffs_list"]
         rec = all_params["static"]["network"]["subdomain"]["recurrences"]
         a_list = rec["a_list"]
@@ -1073,14 +1002,6 @@ class StackedOrthogonalPolynomialKAN(Network):
         return _apply_all(coeffs_list, a_list, b_list, c_list, d_list, x)
 
 class StackedLegendreKAN_(Network):
-    """
-    Wrapper for a stacked Legendre‐polynomial KAN using the original (2n−1) normalization,
-    implemented without explicit Python‐level branching. Delegates to StackedOrthogonalPolynomialKAN.
-    
-    Args:
-      dims:    [I₀, I₁, ..., I_B], length = B+1
-      degrees: [D₀, D₁, ..., D_{B-1}], length = B
-    """
 
     @staticmethod
     def init_params(
@@ -1115,14 +1036,6 @@ class StackedLegendreKAN_(Network):
 
 
 class StackedChebyshevKAN_(Network):
-    """
-    Wrapper for a stacked Chebyshev‐polynomial KAN (first kind, Tₙ).
-    Implemented concisely via vectorized array expressions.
-    
-    Args:
-      dims:    [I₀, I₁, ..., I_B], length = B+1
-      degrees: [D₀, D₁, ..., D_{B-1}], length = B
-    """
 
     @staticmethod
     def init_params(
@@ -1158,14 +1071,6 @@ class StackedChebyshevKAN_(Network):
 
 
 class StackedHermiteKAN_(Network):
-    """
-    Wrapper for a stacked Hermite‐polynomial KAN (physicists' version).
-    Implemented concisely via vectorized array expressions.
-    
-    Args:
-      dims:    [I₀, I₁, ..., I_B], length = B+1
-      degrees: [D₀, D₁, ..., D_{B-1}], length = B
-    """
 
     @staticmethod
     def init_params(
@@ -1195,16 +1100,6 @@ class StackedHermiteKAN_(Network):
         return StackedOrthogonalPolynomialKAN.network_fn(all_params, x)
 
 class StackedJacobiKAN_(Network):
-    """
-    Wrapper for a stacked Jacobi‐polynomial KAN with α=β=1 (i.e. Jacobi(1,1)),
-    implemented succinctly (no trainable α,β). Delegates to StackedOrthogonalPolynomialKAN.
-    
-    Recurrence (α=β=1):
-        P₀(x) = 1,
-        P₁(x) = 2x,
-        Pₙ(x) = [ (2n+1)(2n+2)·x·P_{n-1}(x)  –  2n²(2n+2)·P_{n-2}(x) ]
-               / [ 2n(n+2) ],  n ≥ 2.
-    """
 
     @staticmethod
     def init_params(
