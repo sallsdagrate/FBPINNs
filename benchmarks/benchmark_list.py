@@ -10,7 +10,17 @@ from config.problems_config import (
     Wave_1_plus_1D,
     Kovasznay_Flow,
     TaylorGreenVortex,
-    WaveGaussianVelocity
+    WaveGaussianVelocity,
+    Wave_1_plus_1D_High_50,
+    Wave_1_plus_1D_High_100,    
+    Wave_1_plus_1D_High_200,    
+    Wave_1_plus_1D_High_400,
+    Wave_1_plus_1D_grid,
+    Wave_1_plus_1D_uniform,
+    Wave_1_plus_1D_sobol,
+    Wave_1_plus_1D_halton,
+    Wave_1_plus_1D_Attention,
+    Burgers_1_plus_1D_Attention
     )
 from config.domains_config import Rectangle_1D, Rectangle_2D, Rectangle_3D
 import jax.numpy as jnp
@@ -51,6 +61,14 @@ burgers = {
         "dims": (2, 1),
     },
 }
+burgers_attn = {
+    "Burgers_1+1D_Attention": {
+        "problem": Burgers_1_plus_1D_Attention,
+        "domain": Rectangle_2D(-1, 1, 0, 1),
+        "decomposition": Rectangle_2D_Decomposition(-1, 1, 0, 1, n1=20, n2=10),
+        "dims": (2, 1),
+    },
+}
 
 poisson_2d = {
     "Poisson_2D": {
@@ -65,7 +83,8 @@ schrodinger_stationary = {
     "Schrodinger1D_Stationary": {
         "problem": Schrodinger1D_Stationary,
         "domain": Rectangle_2D(-5., 5., 0., jnp.pi),
-        "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi, n1=20, n2=5),
+        # "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi, n1=20, n2=5),
+        "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi, n1=10, n2=5),
         "dims": (2, 2),
     },
 }
@@ -114,5 +133,94 @@ wave_eq_gauss = {
         "domain": Rectangle_3D(*wave_eq_gauss_pos),
         "decomposition": Rectangle_3D_Decomposition(*wave_eq_gauss_pos),
         "dims": (3, 1)
+    }
+}
+
+
+schrodinger_stationary_4_2 = {
+    "Schrodinger1D_Stationary_4_2": {
+        "problem": Schrodinger1D_Stationary,
+        "domain": Rectangle_2D(-5., 5., 0., jnp.pi),
+        "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi, n1=5, n2=2),
+        "dims": (2, 2),
+    },
+}
+schrodinger_stationary_10_4 = {
+    "Schrodinger1D_Stationary_10_4": {
+        "problem": Schrodinger1D_Stationary,
+        "domain": Rectangle_2D(-5., 5., 0., jnp.pi),
+        "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi, n1=10, n2=4),
+        "dims": (2, 2),
+    },
+}
+schrodinger_stationary_20_8 = {
+    "Schrodinger1D_Stationary_20_8": {
+        "problem": Schrodinger1D_Stationary,
+        "domain": Rectangle_2D(-5., 5., 0., jnp.pi),
+        "decomposition": Rectangle_2D_Decomposition(-5., 5., 0., jnp.pi, n1=20, n2=8),
+        "dims": (2, 2),
+    },
+}
+
+wave_high_n = {
+    # "Wave_50": {
+    #     "problem": Wave_1_plus_1D_High_50,
+    #     "domain": Rectangle_2D(0., 1., 0., 1.),
+    #     "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+    #     "dims": (2, 1)
+    # },
+    # "Wave_100": {
+    #     "problem": Wave_1_plus_1D_High_100,
+    #     "domain": Rectangle_2D(0., 1., 0., 1.),
+    #     "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+    #     "dims": (2, 1)
+    # },
+    "Wave_200": {
+        "problem": Wave_1_plus_1D_High_200,
+        "domain": Rectangle_2D(0., 1., 0., 1.),
+        "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+        "dims": (2, 1)
+    },
+    # "Wave_400": {
+    #     "problem": Wave_1_plus_1D_High_400,
+    #     "domain": Rectangle_2D(0., 1., 0., 1.),
+    #     "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+    #     "dims": (2, 1)
+    # }
+}
+
+wave_sampler = {
+    # "Wave_grid": {
+    #     "problem": Wave_1_plus_1D_grid,
+    #     "domain": Rectangle_2D(0., 1., 0., 1.),
+    #     "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+    #     "dims": (2, 1)
+    # },
+    "Wave_uniform": {
+        "problem": Wave_1_plus_1D_uniform,
+        "domain": Rectangle_2D(0., 1., 0., 1.),
+        "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+        "dims": (2, 1)
+    },
+    "Wave_sobol": {
+        "problem": Wave_1_plus_1D_sobol,
+        "domain": Rectangle_2D(0., 1., 0., 1.),
+        "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+        "dims": (2, 1)
+    },
+    "Wave_halton": {
+        "problem": Wave_1_plus_1D_halton,
+        "domain": Rectangle_2D(0., 1., 0., 1.),
+        "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+        "dims": (2, 1)
+    }
+}
+
+wave_attention = {
+    "Wave_Attention": {
+        "problem": Wave_1_plus_1D_Attention,
+        "domain": Rectangle_2D(0., 1., 0., 1.),
+        "decomposition": Rectangle_2D_Decomposition(0., 1., 0., 1., n1=5, n2=5),
+        "dims": (2, 1)
     }
 }

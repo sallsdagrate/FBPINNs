@@ -1,11 +1,4 @@
-from fbpinns.networks import (
-    FCN, AdaptiveFCN, 
-    ChebyshevKAN, ChebyshevAdaptiveKAN, 
-    StackedChebyshevKAN, StackedLegendreKAN,
-    LegendreKAN, LegendreAdaptiveKAN,
-    OptimizedChebyshevKAN, OptimizedStackedChebyshevKAN,
-    MixedBasisKAN,
-    )
+from fbpinns.networks import *
 
 from typing import Tuple
 # FCN
@@ -46,6 +39,12 @@ def OptimizedStackedCKAN_Generator(degrees, hidden_dims, kind=2):
         dims=[indim] + hidden_dims + [outdim],
         degrees=degrees,
         kinds=kind))
+
+def gen(degrees, hidden_dims, cl):
+    return lambda indim, outdim: (f"{cl.__name__}_deg{degrees}_h{hidden_dims}", cl, dict(
+        dims=[indim] + hidden_dims + [outdim],
+        degrees=degrees
+        ))
 
 # CKAN Adaptive
 def ChebyshevAdaptiveKAN_Generator(degree, kind=1):
@@ -246,23 +245,20 @@ def get_models_mixed_basis_kan():
 
 def get_models_scheduling():
     return [
-        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[16]),
-        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[14]),
-        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[12]),
-        # OptimizedStackedCKAN_Generator(degrees=[8, 8], hidden_dims=[10]),
-        # OptimizedStackedCKAN_Generator(degrees=[6, 6], hidden_dims=[10]),
-        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[10]),
-        # OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[8]),
+        OptimizedStackedCKAN_Generator(degrees=[8, 8], hidden_dims=[4]),
+        OptimizedStackedCKAN_Generator(degrees=[6, 6], hidden_dims=[4]),
         OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[6]),
+        OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[5]),
         OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[4]),
-        # OptimizedStackedCKAN_Generator(degrees=[4, 4, 4], hidden_dims=[10, 10]),
-        # OptimizedStackedCKAN_Generator(degrees=[4, 4, 4, 4], hidden_dims=[10, 10, 10]),
+        OptimizedStackedCKAN_Generator(degrees=[4, 4], hidden_dims=[3]),
+        OptimizedStackedCKAN_Generator(degrees=[4, 4, 4], hidden_dims=[10, 10]),
+        OptimizedStackedCKAN_Generator(degrees=[4, 4, 4, 4], hidden_dims=[10, 10, 10]),
         FCN_Generator([8, 8]),
         FCN_Generator([16, 16]),
-        # FCN_Generator([32, 32]),
-        # FCN_Generator([32, 32, 32]),
-        # FCN_Generator([32, 32, 32, 32]),
-        # FCN_Generator([64, 64]),
+        FCN_Generator([32, 32]),
+        FCN_Generator([32, 32, 32]),
+        FCN_Generator([32, 32, 32, 32]),
+        FCN_Generator([64, 64]),
     ]
 
 
@@ -283,6 +279,57 @@ def get_models_gauss():
         OptimizedStackedCKAN_Generator(degrees=[7, 7], hidden_dims=[4]),
     ]
 
+def get_models_polynomials():
+    return [
+        FCN_Generator([8, 8]),
+        FCN_Generator([32, 32]),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedHermiteKAN_),
+        # gen(degrees=[6, 6], hidden_dims=[4], cl=StackedHermiteKAN_),
+        # gen(degrees=[8, 8], hidden_dims=[4], cl=StackedHermiteKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedLegendreKAN_),
+        # gen(degrees=[6, 6], hidden_dims=[4], cl=StackedLegendreKAN_),
+        # gen(degrees=[8, 8], hidden_dims=[4], cl=StackedLegendreKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedChebyshevKAN_),
+        # gen(degrees=[6, 6], hidden_dims=[4], cl=StackedChebyshevKAN_),
+        # gen(degrees=[8, 8], hidden_dims=[4], cl=StackedChebyshevKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedJacobiKAN_),
+        # gen(degrees=[6, 6], hidden_dims=[4], cl=StackedJacobiKAN_),
+        # gen(degrees=[8, 8], hidden_dims=[4], cl=StackedJacobiKAN_),
+
+        # gen(degrees=[4, 4], hidden_dims=[2], cl=StackedHermiteKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedHermiteKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[8], cl=StackedHermiteKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[12], cl=StackedHermiteKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[2], cl=StackedLegendreKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedLegendreKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[8], cl=StackedLegendreKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[12], cl=StackedLegendreKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[2], cl=StackedChebyshevKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedChebyshevKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[8], cl=StackedChebyshevKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[12], cl=StackedChebyshevKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[2], cl=StackedJacobiKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[4], cl=StackedJacobiKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[8], cl=StackedJacobiKAN_),
+        # gen(degrees=[4, 4], hidden_dims=[12], cl=StackedJacobiKAN_),
+    ]
+
+def get_models_ddm():
+    return [
+        gen(degrees=[4, 4], hidden_dims=[4], cl=StackedJacobiKAN_),
+        FCN_Generator([32, 32]),
+    ]
+
+def get_models_attn():
+    return [
+        gen(degrees=[4, 4], hidden_dims=[4], cl=StackedLegendreKAN_),
+        gen(degrees=[4, 4], hidden_dims=[8], cl=StackedLegendreKAN_),
+        gen(degrees=[6, 6], hidden_dims=[4], cl=StackedJacobiKAN_),
+        gen(degrees=[6, 6], hidden_dims=[8], cl=StackedJacobiKAN_),
+        FCN_Generator([8, 8]),
+        FCN_Generator([32, 32]),
+    ]
+        
 
 if __name__ == "__main__":
     m = FCN_Generator(16)(2, 1)

@@ -11,6 +11,7 @@ import jax.numpy as jnp
 from jax import random
 import jax
 from functools import partial
+from typing import List, Dict, Tuple
 
 
 class Network:
@@ -841,58 +842,414 @@ if __name__ == "__main__":
         print(x.shape, network.network_fn(params, x).shape, NN.__name__)
 
 
-# class ChebyshevResKAN(Network):
-#     "Chebyshev polynomials with a residual connection from x via a learned projection."
+class OrthogonalPolynomialKAN(Network):
+    """
+    General JIT‐compiled “Orthogonal Polynomial KAN” for any 3‐term recurrence.
 
-#     @staticmethod
-#     def init_params(key, input_dim, output_dim, degree, kind=2):
-#         # Initialize coefficients for the Chebyshev basis as before.
-#         mean = 0.0
-#         std = 1/(input_dim * (degree + 1))
-#         coeffs = mean + std * random.normal(key, (input_dim, output_dim, degree + 1))
-#         # Additional parameters for the residual branch that projects x from input_dim to output_dim.
-#         res_key, key = random.split(key)
-#         W_res = random.normal(res_key, (input_dim, output_dim)) * (1.0 / input_dim)
-#         b_res = jnp.zeros((output_dim,))
-#         trainable_params = {
-#             "coeffs": coeffs,
-#             "W_res": W_res,
-#             "b_res": b_res,
-#         }
-#         # "kind" is treated as a static parameter.
-#         return {"kind": kind}, trainable_params
+    Recurrence form (for n = 2..D):
+        P₀(x) = 1,
+        P₁(x) = (a₁ x + b₁)/d₁,
+        Pₙ(x) = [ (aₙ x + bₙ)·P_{n-1}(x)  –  cₙ·P_{n-2}(x ) ] / dₙ,    n ≥ 2.
 
-#     @staticmethod
-#     def network_fn(all_params, x):
-#         coeffs = all_params["trainable"]["network"]["subdomain"]["coeffs"]
-#         W_res = all_params["trainable"]["network"]["subdomain"]["W_res"]
-#         b_res = all_params["trainable"]["network"]["subdomain"]["b_res"]
-#         kind = all_params["static"]["network"]["subdomain"]["kind"]
-#         poly_out = ChebyshevKAN.forward(coeffs, kind, x)
-#         # Compute the residual projection: shape (batch_size, output_dim)
-#         res_proj = jnp.tanh(jnp.dot(x, W_res) + b_res)
-#         # Add the residual to the polynomial output.
-#         # Note: the transformation applied to x in the polynomial branch is tanh(x),
-#         # which we can also mimic in the residual branch (or not) depending on what works best.
-#         return poly_out + res_proj
+    The user supplies four 1D arrays (each length D+1):
+        a = [a₀, a₁, …, a_D],
+        b = [b₀, b₁, …, b_D],
+        c = [c₀, c₁, …, c_D],
+        d = [d₀, d₁, …, d_D].
 
-#     @staticmethod
-#     def forward(coeffs, kind, x):
-#         input_dim = coeffs.shape[0]
-#         degree = coeffs.shape[-1] - 1
+    Typically a₀=0, b₀=0, c₁=0, d₀=1 so that P₀=1, P₁=(a₁x + b₁)/d₁.
+    """
 
-#         # Apply a non-linear squashing function to x (as in the original code) for the polynomial branch.
-#         # Note: The residual branch in our example uses the raw x; but alternatively, one could use a non-linear version.
-#         x_poly = jnp.tanh(x)
-#         batch_size = x_poly.shape[0]
+    @staticmethod
+    def init_params(
+        key,
+        in_dim: int,
+        out_dim: int,
+        degree: int,
+        recurrence_coefs: Dict[str, jnp.ndarray]
+    ) -> Tuple[Dict, Dict]:
+        """
+        - `degree` = D.  Trainable coeffs shape = (in_dim, out_dim, D+1).
+        - `recurrence_coefs` must be a dict with keys "a","b","c","d",
+          each a jnp.ndarray of shape (D+1,).
+        """
 
-#         # Initialize the Chebyshev basis: shape (batch_size, input_dim, degree+1)
-#         basis = jnp.ones((batch_size, input_dim, degree + 1))
-#         if degree >= 1:
-#             basis = basis.at[:, :, 1].set(kind * x_poly)
-#         for d in range(2, degree + 1):
-#             basis = basis.at[:, :, d].set(2 * x_poly * basis[:, :, d - 1] - basis[:, :, d - 2])
-            
-#         # Compute the polynomial output using Einstein summation.
-#         poly_out = jnp.einsum("bid,iod->bo", basis, coeffs)
-#         return poly_out
+        std = 1.0 / (in_dim * (degree + 1))
+        coeffs = std * jax.random.normal(key, (in_dim, out_dim, degree + 1))
+
+        static_params = {
+            "recurrence": {
+                "a": recurrence_coefs["a"],
+                "b": recurrence_coefs["b"],
+                "c": recurrence_coefs["c"],
+                "d": recurrence_coefs["d"]
+            }
+        }
+        trainable_params = {
+            "coeffs": coeffs
+        }
+        return static_params, trainable_params
+
+    @staticmethod
+    def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
+        """
+        Pull out:
+          - coeffs (trainable):   shape = (in_dim, out_dim, D+1)
+          - a, b, c, d (static):  each shape = (D+1,)
+
+        JIT‐compile a single forward over (coeffs, a, b, c, d, x).
+        """
+        coeffs = all_params["trainable"]["network"]["coeffs"]
+        rec   = all_params["static"]["network"]["recurrence"]
+        a     = rec["a"]
+        b     = rec["b"]
+        c     = rec["c"]
+        d     = rec["d"]
+
+        @jax.jit
+        def _apply_jit(coeffs_jit, a_jit, b_jit, c_jit, d_jit, x_inp) -> jnp.ndarray:
+            return OrthogonalPolynomialKAN._forward_jit(
+                coeffs_jit, a_jit, b_jit, c_jit, d_jit, x_inp
+            )
+
+        return _apply_jit(coeffs, a, b, c, d, x)
+
+    @staticmethod
+    def _forward_jit(
+        coeffs, a, b, c, d, x
+    ) -> jnp.ndarray:
+        """
+        Build {P₀…P_D}( tanh(x) ) via a single lax.scan, then contract.
+
+        - coeffs: (in_dim, out_dim, D+1)
+        - a,b,c,d: each (D+1,)
+        - x: (batch_size, in_dim) or (in_dim,) 
+        """
+        was_vector = (x.ndim == 1)
+        x_batch = x if not was_vector else x[None, :]    # → (batch_size, in_dim)
+        # z = jnp.tanh(x_batch)                            # (batch_size, in_dim)
+        z = x
+        batch_size, in_dim = z.shape
+        D = coeffs.shape[-1] - 1
+
+        # P₀(x) = 1
+        P0 = jnp.ones_like(z)                            # (batch_size, in_dim)
+
+        if D == 0:
+            basis = P0[..., None]                        # (batch_size, in_dim, 1)
+            y = jnp.tensordot(basis, coeffs, axes=([1, 2], [0, 2]))
+            return y[0] if was_vector else y
+
+        # P₁(x) = (a₁·x + b₁)/d₁
+        P1 = (a[1] * z + b[1]) / d[1]                     # (batch_size, in_dim)
+
+        if D == 1:
+            basis = jnp.stack([P0, P1], axis=-1)         # (batch_size, in_dim, 2)
+            y = jnp.tensordot(basis, coeffs, axes=([1, 2], [0, 2]))
+            return y[0] if was_vector else y
+
+        # For n=2..D: Pₙ = [ (aₙ x + bₙ)·P_{n-1} – cₙ·P_{n-2} ] / dₙ
+        def step_fn(carry, n_idx):
+            prev2, prev1 = carry                        # each (batch_size, in_dim)
+            term1 = (a[n_idx] * z + b[n_idx]) * prev1   # (batch_size, in_dim)
+            term2 = c[n_idx] * prev2                    # (batch_size, in_dim)
+            Pn    = (term1 - term2) / d[n_idx]          # (batch_size, in_dim)
+            return (prev1, Pn), Pn
+
+        ns = jnp.arange(2, D + 1)
+        init_carry = (P0, P1)
+        (_, _), scanned = jax.lax.scan(step_fn, init_carry, ns)
+        # scanned: (D-1, batch_size, in_dim) → moveaxis → (batch_size, in_dim, D-1)
+        scanned = jnp.moveaxis(scanned, 0, -1)
+
+        basis = jnp.concatenate(
+            [P0[..., None], P1[..., None], scanned],
+            axis=-1
+        )  # (batch_size, in_dim, D+1)
+
+        y = jnp.tensordot(basis, coeffs, axes=([1, 2], [0, 2]))  # (batch_size, out_dim)
+        return y[0] if was_vector else y
+
+
+class StackedOrthogonalPolynomialKAN(Network):
+    """
+    “Stacked” version: apply B blocks in series, each with its own 3‐term recurrence.
+
+    Args:
+      dims:        [I₀, I₁, …, I_B], length = B+1
+      degrees:     [D₀, D₁, …, D_{B-1}], length = B
+      recurrences: List of length B, where
+          recurrences[i] = {
+              "a": jnp.ndarray(shape=(D_i+1,)),
+              "b": jnp.ndarray(shape=(D_i+1,)),
+              "c": jnp.ndarray(shape=(D_i+1,)),
+              "d": jnp.ndarray(shape=(D_i+1,))
+          }
+    """
+
+    @staticmethod
+    def init_params(
+        key ,
+        dims: List[int],
+        degrees: List[int],
+        recurrences: List[Dict[str, jnp.ndarray]]
+    ) -> Tuple[Dict, Dict]:
+        """
+        For each block i=0..B-1:
+          - dims[i] → dims[i+1]
+          - degree = degrees[i]
+          - recurrences[i] has arrays "a","b","c","d" of length degree+1.
+
+        Splits `key` into B sub‐keys, initializes one (in_i, out_i, degree_i+1) trainable
+        coeff tensor per block, and stores the recurrence arrays in static.
+        """
+        B = len(degrees)
+        assert len(dims) == B + 1
+        assert len(recurrences) == B
+
+        keys = jax.random.split(key, B)
+        coeffs_list, a_list, b_list, c_list, d_list = [], [], [], [], []
+
+        for i in range(B):
+            d_in, d_out = dims[i], dims[i+1]
+            D_i = degrees[i]
+
+            std = 1.0 / (d_in * (D_i + 1))
+            coeffs_block = std * jax.random.normal(keys[i], (d_in, d_out, D_i + 1))
+
+            coeffs_list.append(coeffs_block)
+            a_list.append(recurrences[i]["a"])
+            b_list.append(recurrences[i]["b"])
+            c_list.append(recurrences[i]["c"])
+            d_list.append(recurrences[i]["d"])
+
+        static_params = {
+            "recurrences": {
+                "a_list": tuple(a_list),
+                "b_list": tuple(b_list),
+                "c_list": tuple(c_list),
+                "d_list": tuple(d_list),
+            }
+        }
+        trainable_params = {
+            "coeffs_list": tuple(coeffs_list)
+        }
+        return static_params, trainable_params
+
+    @staticmethod
+    def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
+        """
+        JIT‐compile a single function that loops through all B blocks.  Each block i:
+          - takes yᶦ (shape=(batch_size, dims[i]))
+          - builds basis P₀…P_{D_i} at z = tanh(yᶦ)
+          - contracts with coeffs_list[i] (shape=(dims[i], dims[i+1], D_i+1))
+          - outputs yⁱ⁺¹ (shape=(batch_size, dims[i+1])).
+
+        Returns final y⁽ᴮ⁾ (shape=(batch_size, dims[B])) or vector if input was vector.
+        """
+        coeffs_list = all_params["trainable"]["network"]["subdomain"]["coeffs_list"]
+        rec = all_params["static"]["network"]["subdomain"]["recurrences"]
+        a_list = rec["a_list"]
+        b_list = rec["b_list"]
+        c_list = rec["c_list"]
+        d_list = rec["d_list"]
+
+        @jax.jit
+        def _apply_all(coeffs_tuple, a_tuple, b_tuple, c_tuple, d_tuple, x_inp) -> jnp.ndarray:
+            y = x_inp
+            was_vector = (y.ndim == 1)
+            if was_vector:
+                y = y[None, :]
+
+            for coeffs_block, a_block, b_block, c_block, d_block in zip(
+                coeffs_tuple, a_tuple, b_tuple, c_tuple, d_tuple
+            ):
+                y = OrthogonalPolynomialKAN._forward_jit(
+                    coeffs_block, a_block, b_block, c_block, d_block, y
+                )
+
+            return y[0] if was_vector else y
+
+        return _apply_all(coeffs_list, a_list, b_list, c_list, d_list, x)
+
+class StackedLegendreKAN_(Network):
+    """
+    Wrapper for a stacked Legendre‐polynomial KAN using the original (2n−1) normalization,
+    implemented without explicit Python‐level branching. Delegates to StackedOrthogonalPolynomialKAN.
+    
+    Args:
+      dims:    [I₀, I₁, ..., I_B], length = B+1
+      degrees: [D₀, D₁, ..., D_{B-1}], length = B
+    """
+
+    @staticmethod
+    def init_params(
+        key ,
+        dims: List[int],
+        degrees: List[int]
+    ) -> Tuple[Dict, Dict]:
+        B = len(degrees)
+        assert len(dims) == B + 1
+
+        # Split the PRNG key into B sub‐keys
+        keys = jax.random.split(key, B)
+
+        recurrences: List[Dict[str, jnp.ndarray]] = []
+        for i, D in enumerate(degrees):
+            n = jnp.arange(D + 1, dtype=jnp.float32)
+            a = jnp.where(n == 0.0,
+                          0.0,
+                          jnp.where(n == 1.0,
+                                    1.0,
+                                    2.0 * n - 1.0))
+            b = jnp.zeros(D + 1, dtype=jnp.float32)
+            c = jnp.where(n >= 2.0, n - 1.0, 0.0)
+            d = jnp.where(n >= 2.0, n, 1.0)
+            recurrences.append({"a": a, "b": b, "c": c, "d": d})
+
+        return StackedOrthogonalPolynomialKAN.init_params(key, dims, degrees, recurrences)
+
+    @staticmethod
+    def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
+        return StackedOrthogonalPolynomialKAN.network_fn(all_params, x)
+
+
+class StackedChebyshevKAN_(Network):
+    """
+    Wrapper for a stacked Chebyshev‐polynomial KAN (first kind, Tₙ).
+    Implemented concisely via vectorized array expressions.
+    
+    Args:
+      dims:    [I₀, I₁, ..., I_B], length = B+1
+      degrees: [D₀, D₁, ..., D_{B-1}], length = B
+    """
+
+    @staticmethod
+    def init_params(
+        key ,
+        dims: List[int],
+        degrees: List[int],
+        kind: float = 2.
+    ) -> Tuple[Dict, Dict]:
+        B = len(degrees)
+        assert len(dims) == B + 1
+
+        # Split the PRNG key into B sub‐keys
+        keys = jax.random.split(key, B)
+
+        recurrences: List[Dict[str, jnp.ndarray]] = []
+        for i, D in enumerate(degrees):
+            n = jnp.arange(D + 1, dtype=jnp.float32)
+            a = jnp.where(n == 0.0,
+                          0.0,
+                          jnp.where(n == 1.0,
+                                    kind,
+                                    2.0))
+            b = jnp.zeros(D + 1, dtype=jnp.float32)
+            c = jnp.where(n >= 2.0, 1.0, 0.0)
+            d = jnp.ones(D + 1, dtype=jnp.float32)
+            recurrences.append({"a": a, "b": b, "c": c, "d": d})
+
+        return StackedOrthogonalPolynomialKAN.init_params(key, dims, degrees, recurrences)
+
+    @staticmethod
+    def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
+        return StackedOrthogonalPolynomialKAN.network_fn(all_params, x)
+
+
+class StackedHermiteKAN_(Network):
+    """
+    Wrapper for a stacked Hermite‐polynomial KAN (physicists' version).
+    Implemented concisely via vectorized array expressions.
+    
+    Args:
+      dims:    [I₀, I₁, ..., I_B], length = B+1
+      degrees: [D₀, D₁, ..., D_{B-1}], length = B
+    """
+
+    @staticmethod
+    def init_params(
+        key ,
+        dims: List[int],
+        degrees: List[int]
+    ) -> Tuple[Dict, Dict]:
+        B = len(degrees)
+        assert len(dims) == B + 1
+
+        # Split the PRNG key into B sub‐keys
+        keys = jax.random.split(key, B)
+
+        recurrences: List[Dict[str, jnp.ndarray]] = []
+        for i, D in enumerate(degrees):
+            n = jnp.arange(D + 1, dtype=jnp.float32)
+            a = jnp.where(n >= 1.0, 2.0, 0.0)
+            b = jnp.zeros(D + 1, dtype=jnp.float32)
+            c = jnp.where(n >= 2.0, 2.0 * (n - 1.0), 0.0)
+            d = jnp.ones(D + 1, dtype=jnp.float32)
+            recurrences.append({"a": a, "b": b, "c": c, "d": d})
+
+        return StackedOrthogonalPolynomialKAN.init_params(key, dims, degrees, recurrences)
+
+    @staticmethod
+    def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
+        return StackedOrthogonalPolynomialKAN.network_fn(all_params, x)
+
+class StackedJacobiKAN_(Network):
+    """
+    Wrapper for a stacked Jacobi‐polynomial KAN with α=β=1 (i.e. Jacobi(1,1)),
+    implemented succinctly (no trainable α,β). Delegates to StackedOrthogonalPolynomialKAN.
+    
+    Recurrence (α=β=1):
+        P₀(x) = 1,
+        P₁(x) = 2x,
+        Pₙ(x) = [ (2n+1)(2n+2)·x·P_{n-1}(x)  –  2n²(2n+2)·P_{n-2}(x) ]
+               / [ 2n(n+2) ],  n ≥ 2.
+    """
+
+    @staticmethod
+    def init_params(
+        key,
+        dims: List[int],
+        degrees: List[int]
+    ) -> Tuple[Dict, Dict]:
+        B = len(degrees)
+        assert len(dims) == B + 1
+
+        # Split key into B subkeys (used for coeff init)
+        keys = jax.random.split(key, B)
+
+        recurrences: List[Dict[str, jnp.ndarray]] = []
+        for i, D in enumerate(degrees):
+            n = jnp.arange(D + 1, dtype=jnp.float32)
+
+            # a[n] = 0 if n=0; 2 if n=1; ½·(2n+1)(2n+2) if n≥2
+            a = jnp.where(
+                n == 0.0,
+                0.0,
+                jnp.where(
+                    n == 1.0,
+                    2.0,
+                    0.5 * (2.0 * n + 1.0) * (2.0 * n + 2.0)
+                )
+            )
+
+            # b[n] = 0 (because α−β=0 when α=β=1)
+            b = jnp.zeros(D + 1, dtype=jnp.float32)
+
+            # c[n] = 0 if n<2; n^2 if n>=2  (since (1/2)(n)(n)(2n+2) = n²(n+1) but with α=β=1 it simplifies to n²)
+            c = jnp.where(n < 2.0, 0.0, n * n)
+
+            # d[n] = 1 if n<2; 2n(n+2) if n≥2
+            d = jnp.where(
+                n < 2.0,
+                1.0,
+                2.0 * n * (n + 2.0)
+            )
+
+            recurrences.append({"a": a, "b": b, "c": c, "d": d})
+
+        return StackedOrthogonalPolynomialKAN.init_params(key, dims, degrees, recurrences)
+
+    @staticmethod
+    def network_fn(all_params, x: jnp.ndarray) -> jnp.ndarray:
+        return StackedOrthogonalPolynomialKAN.network_fn(all_params, x)

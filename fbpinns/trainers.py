@@ -355,8 +355,8 @@ def FBPINN_update(optimiser_fn, active_opt_states,
         active_params, fixed_params, static_params, takess, constraints, model_fns, jmapss, loss_fn)
     
     # freeze attention gradient
-    # if attention_tracker:
-    #     grads['problem']['attention'] = jnp.zeros_like(grads['problem']['attention'])
+    if attention_tracker:
+        grads['attention']['alpha'] = jnp.zeros_like(grads['attention']['alpha'])
     grads['problem'].pop('selected', None)
     grads['problem']['current_i'] = jnp.zeros_like(grads['problem']['current_i'])
 
@@ -366,11 +366,11 @@ def FBPINN_update(optimiser_fn, active_opt_states,
     active_params = optax.apply_updates(active_params, updates)
 
     # now update the RBA attentions in‐place
-    # if attention_tracker:
-    #     selected = selected.astype(jnp.int32)
-    #     attention_old = active_params["attention"]["alpha"][selected]
-    #     attention_new = attention_tracker.step(attention_old, residuals, static_params["attention"])
-    #     active_params["attention"]["alpha"] = active_params["attention"]["alpha"].at[selected].set(attention_new)
+    if attention_tracker:
+        selected = selected.astype(jnp.int32)
+        attention_old = active_params["attention"]["alpha"][selected]
+        attention_new = attention_tracker.step(attention_old, residuals, static_params["attention"])
+        active_params["attention"]["alpha"] = active_params["attention"]["alpha"].at[selected].set(attention_new)
 
     # reinsert selected after popping (jitted function must have same signature)
     active_params["problem"]["selected"] = selected.astype(jnp.float32)

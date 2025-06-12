@@ -355,6 +355,19 @@ class BurgersEquation2D(Problem):
         u = jnp.array(vu.flatten()).reshape((-1,1))
         return u
 
+class BurgersAttention(BurgersEquation2D):
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        nu = all_params["static"]["problem"]["nu"]
+        _, u, ux, ut, uxx = constraints[0]
+        phys = ut + (u*ux) - (nu*uxx)
+
+        selected = all_params["trainable"]["problem"]["selected"]
+        alpha = all_params["trainable"]["attention"]["alpha"][selected.astype(jnp.int32)]  # (N,1)
+        alpha_detached = jax.lax.stop_gradient(alpha)
+        loss = jnp.mean((alpha_detached[:, None] * phys)**2)
+        return loss, phys
+
 
 
 
@@ -1063,6 +1076,19 @@ class WaveEquation2D(Problem):
         x, t, sin, cos, pi = x_batch[:,0:1], x_batch[:,1:2], jnp.sin, jnp.cos, jnp.pi
         u = sin(pi*x)*cos(c*pi*t) + 0.5 * sin(4*pi*x)*cos(4*c*pi*t)
         return u
+
+class WaveEquation2DAttention(WaveEquation2D):
+    @staticmethod
+    def loss_fn(all_params, constraints):
+        c = all_params["static"]["problem"]["c"]
+        _, uxx, utt = constraints[0]
+        phys = utt - c**2 * uxx
+
+        selected = all_params["trainable"]["problem"]["selected"]
+        alpha = all_params["trainable"]["attention"]["alpha"][selected.astype(jnp.int32)]  # (N,1)
+        alpha_detached = jax.lax.stop_gradient(alpha)
+        loss = jnp.mean((alpha_detached[:, None] * phys)**2)
+        return loss, phys
 
 
 class KovasznayFlow(Problem):
